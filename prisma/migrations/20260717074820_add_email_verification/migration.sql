@@ -1,0 +1,5 @@
+-- AlterTable
+ALTER TABLE "users" ADD COLUMN     "isVerified" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN     "otpExpiresAt" TIMESTAMP(3),
+ALTER COLUMN "otp" DROP NOT NULL,
+ALTER COLUMN "otp" DROP DEFAULT;

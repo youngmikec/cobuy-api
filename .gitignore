@@ -36,9 +36,6 @@ coverage/
 # TypeScript
 *.tsbuildinfo
 
-# Prisma
-prisma/migrations/
-
 # OS
 .DS_Store
 .DS_Store?
