@@ -5,8 +5,10 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Install dependencies needed for native modules
-RUN apk add --no-cache python3 make g++
+# Install dependencies needed for native modules, plus openssl —
+# Prisma's engine binaries need libssl available as a shared library
+# (Node's own statically-linked crypto doesn't cover this).
+RUN apk add --no-cache python3 make g++ openssl
 
 # Copy package files
 COPY package*.json ./
@@ -32,8 +34,9 @@ FROM node:20-alpine AS production
 
 WORKDIR /app
 
-# Install dumb-init for proper signal handling
-RUN apk add --no-cache dumb-init
+# Install dumb-init for proper signal handling, plus openssl —
+# required at runtime for Prisma's query/schema-engine binaries.
+RUN apk add --no-cache dumb-init openssl
 
 # Create non-root user
 RUN addgroup --system --gid 1001 nodejs && \
