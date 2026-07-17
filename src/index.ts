@@ -19,10 +19,13 @@ const NODE_ENV = process.env['NODE_ENV'] ?? 'development';
 
 export async function buildApp(): Promise<FastifyInstance> {
   const fastify = Fastify({
+    // pino-pretty is a devDependency (not shipped in the production image),
+    // so only use it when explicitly in development — anything else
+    // (including a missing/misconfigured NODE_ENV) must fall back to the
+    // plain JSON logger rather than crash trying to load a missing module.
     logger:
-      NODE_ENV === 'production'
-        ? true
-        : {
+      NODE_ENV === 'development'
+        ? {
             transport: {
               target: 'pino-pretty',
               options: {
@@ -30,7 +33,8 @@ export async function buildApp(): Promise<FastifyInstance> {
                 ignore: 'pid,hostname',
               },
             },
-          },
+          }
+        : true,
   });
 
   //Register JWT plugin
