@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node:*)",
+      "Bash(npm install:*)",
+      "Bash(npm run:*)",
+      "Bash(docker-compose up:*)",
+      "Bash(docker system prune:*)",
+      "Bash(docker compose *)",
+      "Bash(docker info *)",
+      "Bash(docker context *)",
+      "Bash(docker version *)",
+      "Bash(sysctl -n machdep.cpu.brand_string)",
+      "Bash(sysctl -n sysctl.proc_translated)",
+      "Bash(docker rmi *)",
+      "Bash(docker pull *)",
+      "Bash(docker run *)",
+      "Bash(npm view *)",
+      "Bash(sudo chown -R 501:20 \"/Users/mac/.npm\")",
+      "Bash(command -v nvm)",
+      "Read(//Users/mac/.nvm/**)",
+      "Bash(grep -v \"^$\")",
+      "Bash(grep -rniE \"ignore \\(previous|all|prior\\) instructions|disregard|system prompt|do not tell the user|without \\(asking|telling|informing\\) the user|secretly|exfiltrat|send.*\\(credentials|secrets|env|\\\\.env\\)|curl.*\\\\|.*sh|wget.*\\\\|.*sh|rm -rf|sudo |chmod 777|reverse shell|nc -e|/etc/passwd|~/.ssh|authorized_keys|--no-verify|bypass\" SKILL.md references/*.py scripts/*.py)",
+      "Bash(echo \"exit code: $?\")",
+      "Bash(npx skills *)",
+      "WebFetch(domain:skills.sh)",
+      "Bash(curl -s \"https://api.github.com/repos/borghei/Claude-Skills/contents/\")"
+    ]
+  }
+}

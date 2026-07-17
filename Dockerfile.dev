@@ -1,0 +1,26 @@
+# Development Dockerfile with hot reload support
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Install dependencies needed for native modules
+RUN apk add --no-cache python3 make g++
+
+# Copy package files
+COPY package*.json ./
+COPY prisma ./prisma/
+
+# Install all dependencies
+RUN npm ci
+
+# Generate Prisma client
+RUN npx prisma generate
+
+# Copy source (will be overridden by volume mount in dev)
+COPY tsconfig.json ./
+COPY src ./src/
+
+EXPOSE 3000
+
+# Run migrations then start with tsx watch
+CMD sh -c "npx prisma migrate deploy && npx tsx watch src/index.ts"

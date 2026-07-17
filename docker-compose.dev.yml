@@ -1,0 +1,26 @@
+services:
+  postgres:
+    ports:
+      - "5432:5432"
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: cobuy-api-dev
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DATABASE_URL: postgresql://postgres:password@postgres:5432/cobuy_dev
+      LOG_LEVEL: debug
+    ports:
+      - "3000:3000"
+    volumes:
+      # Mount source for hot reload
+      - ./src:/app/src:ro
+      - ./prisma:/app/prisma:ro
+    command: ["tsx", "watch", "src/index.ts"]
