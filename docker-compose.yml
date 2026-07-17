@@ -3,6 +3,7 @@ services:
     image: postgres:16-alpine
     container_name: cobuy-postgres
     restart: unless-stopped
+
     environment:
       POSTGRES_DB: cobuy
       POSTGRES_USER: postgres
