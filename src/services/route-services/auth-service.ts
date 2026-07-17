@@ -26,6 +26,11 @@ export const signupService = async (payload: SignupInput) => {
         const otp = generateOtp();
         const otpExpiresAt = getOtpExpiry();
 
+        // Send before persisting: if the OTP email fails or times out, no row
+        // is left behind, so the caller can safely retry signup with the same
+        // email instead of getting stuck on an unverifiable ACCOUNT_EXISTS account.
+        await sendOtpEmail(email, otp);
+
         const user = await prisma.user.create({
             data: {
                 firstName,
@@ -39,18 +44,8 @@ export const signupService = async (payload: SignupInput) => {
             },
         });
 
-        try {
-            await sendOtpEmail(user.email, otp);
-        } catch (emailError: any) {
-            // Account creation should still succeed even if the OTP email fails to send.
-            console.error(`Failed to send signup OTP email to ${user.email}:`, emailError.message);
-        }
-
-        const { accessToken } = await generateAccessToken(user);
-
         return {
             user: toSafeUser(user),
-            accessToken,
         };
     } catch (error: any) {
         if (error instanceof AppError) {

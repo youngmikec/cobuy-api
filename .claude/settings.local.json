@@ -25,7 +25,13 @@
       "Bash(npx skills *)",
       "WebFetch(domain:skills.sh)",
       "Bash(curl -s \"https://api.github.com/repos/borghei/Claude-Skills/contents/\")",
-      "Bash(docker build *)"
+      "Bash(docker build *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(open -a Docker)",
+      "Bash(break)",
+      "Bash(npx prisma *)",
+      "WebFetch(domain:developers.brevo.com)"
     ]
   }
 }

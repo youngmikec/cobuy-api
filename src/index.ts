@@ -65,6 +65,7 @@ export async function buildApp(): Promise<FastifyInstance> {
         { name: 'Health', description: 'Service health checks' },
         { name: 'Users', description: 'User management' },
         { name: 'Auth', description: 'Authentication' },
+        { name: 'Pools', description: 'Pool creation, membership, and listing' },
       ],
       components: {
         securitySchemes: {
@@ -124,6 +125,8 @@ export async function buildApp(): Promise<FastifyInstance> {
 
     const statusCode = error.statusCode ?? 500;
     return reply.status(statusCode).send({
+      status: false,
+      data: null,
       error: statusCode === 500 ? 'Internal Server Error' : error.name,
       message: NODE_ENV === 'production' && statusCode === 500
         ? 'An unexpected error occurred'

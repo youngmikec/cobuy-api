@@ -32,7 +32,19 @@ export const getMailer = (): Transporter => {
     );
   }
 
-  mailer = nodemailer.createTransport({ host, port, secure, auth: { user, pass } });
+  const sendTimeoutMs = parseInt(process.env['EMAIL_SEND_TIMEOUT_MS'] ?? '10000', 10);
+
+  mailer = nodemailer.createTransport({
+    host,
+    port,
+    secure,
+    auth: { user, pass },
+    // Bound every phase of the SMTP handshake so a slow/unreachable host
+    // can't hang the request past EMAIL_SEND_TIMEOUT_MS.
+    connectionTimeout: sendTimeoutMs,
+    greetingTimeout: sendTimeoutMs,
+    socketTimeout: sendTimeoutMs,
+  });
 
   if (process.env['NODE_ENV'] !== 'production') {
     global.__mailer = mailer;
