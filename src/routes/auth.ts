@@ -6,10 +6,12 @@ import {
   resetPasswordSchema,
   signupSchema,
   verifyEmailSchema,
+  refreshTokenSchema,
 } from "../schemas/auth.schema";
 import {
   forgotPasswordHandler,
   loginHandler,
+  refreshTokenHandler,
   resetPasswordHandler,
   signupHandler,
   verifyEmailHandler,
@@ -89,6 +91,28 @@ export const authRoutes = async (app: FastifyInstance): Promise<void> => {
       },
     },
     loginHandler,
+  );
+
+  // POST /auth/refresh-token — refresh an access token using a refresh token
+  app.post(
+    '/auth/refresh-token',
+    {
+      preHandler: [ValidateSchema(refreshTokenSchema, 'body')],
+      attachValidation: true,
+      schema: {
+        tags: ['Auth'],
+        summary: 'Refresh an access token using a refresh token',
+        body: {
+          type: 'object',
+          properties: {
+            refreshToken: { type: 'string' },
+          },
+          required: ['refreshToken'],
+        },
+        response: authResponseSchema,
+      },
+    },
+    refreshTokenHandler,
   );
 
   // POST /auth/verify-email — confirm an OTP sent to the user's email

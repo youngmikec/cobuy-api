@@ -1,12 +1,16 @@
-import { getMailer } from '../lib/mailer';
+import { getEmailProvider } from '../lib/email-provider';
 import { AppError } from '../helpers/error';
+import { withTimeout } from '../helpers/timeout';
 
-const MAIL_FROM = process.env['SMTP_FROM'] ?? 'no-reply@co-buy.com';
+const SEND_TIMEOUT_MS = parseInt(process.env['EMAIL_SEND_TIMEOUT_MS'] ?? '10000', 10);
 
 const sendMail = async (to: string, subject: string, html: string): Promise<void> => {
   try {
-    const mailer = getMailer();
-    await mailer.sendMail({ from: MAIL_FROM, to, subject, html });
+    await withTimeout(
+      getEmailProvider().send({ to, subject, html }),
+      SEND_TIMEOUT_MS,
+      `Email to ${to} did not send within ${SEND_TIMEOUT_MS}ms`,
+    );
   } catch (error: any) {
     if (error instanceof AppError) {
       throw error;

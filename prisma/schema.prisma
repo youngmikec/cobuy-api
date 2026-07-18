@@ -16,6 +16,38 @@ enum Role {
   Admin
 }
 
+enum PoolCategory {
+  BulkPurchase
+  Ajo
+  Fundraising
+  Repair
+  Investment
+  GroupGift
+  Education
+  Custom
+}
+
+enum PoolStatus {
+  OPEN
+  ALMOSTFUL
+  CLOSED
+  FUNDED
+  DISBURSING
+  COMPLETED
+  EXPIRED
+  REFUNDING
+  REFUNDED
+}
+
+enum MembershipState {
+  JOINED
+  AWAITING_PAYMENT
+  PAID
+  REFUND_PENDING
+  REFUNDED
+  REFUND_FAILED
+}
+
 model User {
   id           String    @id @default(uuid())
   avatar       String?
@@ -31,6 +63,77 @@ model User {
   role         Role      @default(User)
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
+  refreshTokens   RefreshToken[]
+
+  leadingPools     Pool[]       @relation("PoolLeader")
+  beneficiaryPools Pool[]       @relation("PoolBeneficiary")
+  memberships      Membership[]
 
   @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  jti       String   @unique
+  userId    String
+  tokenHash String
+  isRevoked Boolean  @default(false)
+  user      User     @relation(fields: [userId], references: [id])
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("refresh_tokens")
+}
+
+model Pool {
+  id String @id @default(uuid())
+
+  leaderId String
+  leader   User   @relation("PoolLeader", fields: [leaderId], references: [id])
+
+  name        String
+  description String?
+  category    PoolCategory @default(Custom)
+
+  targetAmount      Int
+  amountRaised     Int     @default(0)
+  maxMembers            Int
+  splitEven             Boolean @default(true)
+  memberShareAmount Int
+
+  beneficiaryAccountNumber String
+  beneficiaryBankName      String
+  beneficiaryAccountName   String?
+  beneficiaryUserId        String?
+  beneficiaryUser          User?   @relation("PoolBeneficiary", fields: [beneficiaryUserId], references: [id])
+
+  shareToken String @unique @default(uuid())
+
+  deadlineAt DateTime
+  status     PoolStatus @default(OPEN)
+
+  memberships Membership[]
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  stateChangedAt DateTime @default(now())
+
+  @@map("pools")
+}
+
+model Membership {
+  id String @id @default(uuid())
+
+  poolId String
+  pool   Pool   @relation(fields: [poolId], references: [id])
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  state    MembershipState @default(JOINED)
+  joinedAt DateTime        @default(now())
+
+  @@unique([poolId, userId])
+  @@map("memberships")
 }

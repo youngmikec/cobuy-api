@@ -3,6 +3,7 @@ import { AppError } from "../helpers/error";
 import {
     forgotPasswordService,
     loginService,
+    refreshTokenService,
     resetPasswordService,
     signupService,
     verifyEmailService,
@@ -24,6 +25,24 @@ export const loginHandler = async (request: FastifyRequest, reply: FastifyReply)
             success: true,
             data: response,
             message: "Login successful",
+        });
+    } catch (error: any) {
+        if (error instanceof AppError) {
+            throw error;
+        }
+        throw new AppError(500, 'SERVER_ERROR', `${error.message}`);
+    }
+}
+
+export const refreshTokenHandler = async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+        const { refreshToken } = request.body as { refreshToken: string };
+        const response = await refreshTokenService(refreshToken);
+
+        return reply.status(200).send({
+            success: true,
+            data: response,
+            message: "Token refreshed successfully",
         });
     } catch (error: any) {
         if (error instanceof AppError) {

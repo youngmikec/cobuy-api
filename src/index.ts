@@ -19,10 +19,13 @@ const NODE_ENV = process.env['NODE_ENV'] ?? 'development';
 
 export async function buildApp(): Promise<FastifyInstance> {
   const fastify = Fastify({
+    // pino-pretty is a devDependency (not shipped in the production image),
+    // so only use it when explicitly in development — anything else
+    // (including a missing/misconfigured NODE_ENV) must fall back to the
+    // plain JSON logger rather than crash trying to load a missing module.
     logger:
-      NODE_ENV === 'production'
-        ? true
-        : {
+      NODE_ENV === 'development'
+        ? {
             transport: {
               target: 'pino-pretty',
               options: {
@@ -30,7 +33,8 @@ export async function buildApp(): Promise<FastifyInstance> {
                 ignore: 'pid,hostname',
               },
             },
-          },
+          }
+        : true,
   });
 
   //Register JWT plugin
@@ -61,6 +65,8 @@ export async function buildApp(): Promise<FastifyInstance> {
         { name: 'Health', description: 'Service health checks' },
         { name: 'Users', description: 'User management' },
         { name: 'Auth', description: 'Authentication' },
+        { name: 'Pools', description: 'Pool creation, membership, and listing' },
+        { name: 'Banks', description: 'Bank list and account resolution (Monnify)' },
       ],
       components: {
         securitySchemes: {
@@ -97,8 +103,15 @@ export async function buildApp(): Promise<FastifyInstance> {
   });
 
   // Global error handler
-  fastify.setErrorHandler<FastifyError>((error, _request, reply) => {
-    fastify.log.error(error);
+  fastify.setErrorHandler<FastifyError | AppError>((error, _request, reply) => {
+    if (error instanceof AppError) {
+      fastify.log.error({ error }, 'AppError occurred');
+      return reply.status(error.statusCode).send({
+        success: false,
+        data: null,
+        message: error.message,
+      });
+    }
 
     if (error.validation) {
       return reply.status(400).send({
@@ -109,21 +122,17 @@ export async function buildApp(): Promise<FastifyInstance> {
       });
     }
 
-    // Known application errors — safe to expose message
-    if (error instanceof AppError) {
-      return reply.status(error.statusCode).send({
-        success: false,
-        data: null,
-        message: error.message,
-      });
-    }
-
-    const statusCode = error.statusCode ?? 500;
-    return reply.status(statusCode).send({
-      error: statusCode === 500 ? 'Internal Server Error' : error.name,
-      message: NODE_ENV === 'production' && statusCode === 500
-        ? 'An unexpected error occurred'
-        : error.message,
+    fastify.log.error({ err: error });
+    const statusCode = typeof (error as { statusCode?: number }).statusCode === "number"
+      ? (error as { statusCode?: number }).statusCode ?? 500
+      : 500;
+    const message = error instanceof Error ? error.message : "Unexpected error";
+    reply.status(statusCode).send({
+      success: false,
+      data: null,
+      code: statusCode >= 500 ? "INTERNAL_ERROR" : "REQUEST_ERROR",
+      message: statusCode >= 500 ? "Internal server error" : message,
+      requestId: _request.id
     });
   });
 
