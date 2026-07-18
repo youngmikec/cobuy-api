@@ -77,3 +77,11 @@ export const resetPasswordSchema = z.object({
 });
 
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
+
+export const refreshTokenSchema = z.object({
+  refreshToken: z
+    .string({ required_error: 'Refresh token is required' })
+    .min(1, { message: 'Refresh token must not be empty' }),
+});
+
+export type RefreshTokenInput = z.infer<typeof refreshTokenSchema>;

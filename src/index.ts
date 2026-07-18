@@ -66,6 +66,7 @@ export async function buildApp(): Promise<FastifyInstance> {
         { name: 'Users', description: 'User management' },
         { name: 'Auth', description: 'Authentication' },
         { name: 'Pools', description: 'Pool creation, membership, and listing' },
+        { name: 'Banks', description: 'Bank list and account resolution (Monnify)' },
       ],
       components: {
         securitySchemes: {
@@ -102,8 +103,15 @@ export async function buildApp(): Promise<FastifyInstance> {
   });
 
   // Global error handler
-  fastify.setErrorHandler<FastifyError>((error, _request, reply) => {
-    fastify.log.error(error);
+  fastify.setErrorHandler<FastifyError | AppError>((error, _request, reply) => {
+    if (error instanceof AppError) {
+      fastify.log.error({ error }, 'AppError occurred');
+      return reply.status(error.statusCode).send({
+        success: false,
+        data: null,
+        message: error.message,
+      });
+    }
 
     if (error.validation) {
       return reply.status(400).send({
@@ -114,23 +122,17 @@ export async function buildApp(): Promise<FastifyInstance> {
       });
     }
 
-    // Known application errors — safe to expose message
-    if (error instanceof AppError) {
-      return reply.status(error.statusCode).send({
-        success: false,
-        data: null,
-        message: error.message,
-      });
-    }
-
-    const statusCode = error.statusCode ?? 500;
-    return reply.status(statusCode).send({
-      status: false,
+    fastify.log.error({ err: error });
+    const statusCode = typeof (error as { statusCode?: number }).statusCode === "number"
+      ? (error as { statusCode?: number }).statusCode ?? 500
+      : 500;
+    const message = error instanceof Error ? error.message : "Unexpected error";
+    reply.status(statusCode).send({
+      success: false,
       data: null,
-      error: statusCode === 500 ? 'Internal Server Error' : error.name,
-      message: NODE_ENV === 'production' && statusCode === 500
-        ? 'An unexpected error occurred'
-        : error.message,
+      code: statusCode >= 500 ? "INTERNAL_ERROR" : "REQUEST_ERROR",
+      message: statusCode >= 500 ? "Internal server error" : message,
+      requestId: _request.id
     });
   });
 

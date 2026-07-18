@@ -1,5 +1,5 @@
 import { FastifyInstance } from 'fastify';
-import { authenticate, ValidateSchema } from '../middlewares';
+import { authenticate, requireRole, ValidateSchema } from '../middlewares';
 import {
   CreatePoolSchema,
   PoolIdParamsSchema,
@@ -13,6 +13,7 @@ import {
   listPoolMembersHandler,
   listPoolsHandler,
 } from '../controllers/index';
+import { Role } from '@prisma/client';
 
 const poolProperties = {
   id: { type: 'string' },
@@ -83,7 +84,7 @@ export async function poolRoutes(app: FastifyInstance): Promise<void> {
   app.post(
     '/pools',
     {
-      preHandler: [...requireAuth, ValidateSchema(CreatePoolSchema, 'body')],
+      preHandler: [...requireAuth, requireRole(Role.Admin, Role.User), ValidateSchema(CreatePoolSchema, 'body')],
       attachValidation: true,
       schema: {
         tags: ['Pools'],
@@ -129,7 +130,7 @@ export async function poolRoutes(app: FastifyInstance): Promise<void> {
   app.get(
     '/pools',
     {
-      preHandler: requireAuth,
+      preHandler: [...requireAuth, requireRole(Role.Admin, Role.User)],
       schema: {
         tags: ['Pools'],
         summary: 'List all pools',
@@ -154,7 +155,7 @@ export async function poolRoutes(app: FastifyInstance): Promise<void> {
   app.get(
     '/pools/mine',
     {
-      preHandler: requireAuth,
+      preHandler: [...requireAuth, requireRole(Role.Admin, Role.User)],
       schema: {
         tags: ['Pools'],
         summary: "List the current user's pools",
@@ -179,7 +180,7 @@ export async function poolRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Params: PoolIdParams }>(
     '/pools/:id',
     {
-      preHandler: [...requireAuth, ValidateSchema(PoolIdParamsSchema, 'params')],
+      preHandler: [...requireAuth, requireRole(Role.Admin, Role.User), ValidateSchema(PoolIdParamsSchema, 'params')],
       attachValidation: true,
       schema: {
         tags: ['Pools'],
@@ -211,7 +212,7 @@ export async function poolRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Params: PoolIdParams }>(
     '/pools/:id/join',
     {
-      preHandler: [...requireAuth, ValidateSchema(PoolIdParamsSchema, 'params')],
+      preHandler: [...requireAuth, requireRole(Role.Admin, Role.User), ValidateSchema(PoolIdParamsSchema, 'params')],
       attachValidation: true,
       schema: {
         tags: ['Pools'],
@@ -245,7 +246,7 @@ export async function poolRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Params: PoolIdParams }>(
     '/pools/:id/members',
     {
-      preHandler: [...requireAuth, ValidateSchema(PoolIdParamsSchema, 'params')],
+      preHandler: [...requireAuth, requireRole(Role.Admin, Role.User), ValidateSchema(PoolIdParamsSchema, 'params')],
       attachValidation: true,
       schema: {
         tags: ['Pools'],

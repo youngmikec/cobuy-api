@@ -31,7 +31,9 @@
       "Bash(open -a Docker)",
       "Bash(break)",
       "Bash(npx prisma *)",
-      "WebFetch(domain:developers.brevo.com)"
+      "WebFetch(domain:developers.brevo.com)",
+      "WebFetch(domain:developers.monnify.com)",
+      "WebSearch"
     ]
   }
 }
