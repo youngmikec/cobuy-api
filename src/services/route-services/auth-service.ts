@@ -1,5 +1,5 @@
 import { AppError } from "../../helpers/error";
-import { generateAccessToken, hashPassword, verifyPassword } from "../../helpers/password";
+import { generateAccessToken, generateRefreshToken, hashPassword, verifyPassword, verifyRefreshToken } from "../../helpers/password";
 import { toSafeUser } from "../../helpers/user";
 import { generateOtp, getOtpExpiry, isOtpExpired } from "../../helpers/otp";
 import { sendOtpEmail, sendPasswordResetEmail } from "../email-service";
@@ -168,12 +168,80 @@ export const loginService = async (payload: LoginInput) => {
         }
 
         const { accessToken } = await generateAccessToken(existingUser);
+        const { refreshToken, jti } = await generateRefreshToken(existingUser);
+        const hashedRefreshToken = await hashPassword(refreshToken);
+
+        await prisma.refreshToken.create({
+            data: {
+                jti: jti,
+                userId: existingUser.id,
+                tokenHash: hashedRefreshToken,
+                isRevoked: false,
+                createdAt: new Date(),
+                expiresAt: new Date(Date.now() + parseInt(process.env['JWT_REFRESH_TTL_HOURS'] ?? '24') * 60 * 60 * 1000),
+            }
+        })
 
         return {
             user: toSafeUser(existingUser),
-            accessToken
+            accessToken,
+            refreshToken
         };
 
+    } catch (error: any) {
+        if (error instanceof AppError) {
+            throw error;
+        }
+        throw new AppError(500, 'SERVER_ERROR', error.message);
+    }
+}
+
+export const refreshTokenService = async (refreshToken: string) => {
+    try {
+        const decoded = await verifyRefreshToken(refreshToken);
+        const { jti, user } = decoded;
+
+        const existingUser = await prisma.user.findUnique({ where: { id: user.id } });
+
+        if (!existingUser) {
+            throw new AppError(404, 'NOT_FOUND', 'User account not found');
+        }
+
+        const storedToken = await prisma.refreshToken.findUnique({ where: { jti, userId: user.id } });
+
+        if (!storedToken || storedToken.isRevoked) {
+            throw new AppError(401, 'INVALID_TOKEN', 'Refresh token is invalid or has been revoked');
+        }
+
+        const { accessToken } = await generateAccessToken(user);
+        const { refreshToken: newRefreshToken, jti: newJti } = await generateRefreshToken(user);
+        const hashedNewRefreshToken = await hashPassword(newRefreshToken);
+
+        // Revoke the old refresh token and store the new one
+        await prisma.$transaction([
+            prisma.refreshToken.update({
+                where: { jti, userId: user.id },
+                data: { 
+                    isRevoked: true,
+                    updatedAt: new Date(),
+                }
+            }),
+            prisma.refreshToken.create({
+                data: {
+                    jti: newJti,
+                    userId: user.id,
+                    tokenHash: hashedNewRefreshToken,
+                    isRevoked: false,
+                    expiresAt: new Date(Date.now() + parseInt(process.env['JWT_REFRESH_TTL_HOURS'] ?? '24') * 60 * 60 * 1000)
+                }
+            })
+        ]);
+
+        return {
+            user: toSafeUser(existingUser),
+            accessToken,
+            refreshToken: newRefreshToken
+        };
     } catch (error: any) {
         if (error instanceof AppError) {
             throw error;
