@@ -44,7 +44,7 @@ export const authenticate = async (request: FastifyRequest, _reply: FastifyReply
         message: 'Access token has expired',
       });
     }
-    request.user = decoded.user;
+    request.user.user = decoded.user;
   } catch (error: any) {
     _reply.status(401).send({
       success: false,
@@ -56,10 +56,7 @@ export const authenticate = async (request: FastifyRequest, _reply: FastifyReply
 
 export const requireRole = (...allowedRoles: Role[]) => {
   return async (request: FastifyRequest, _reply: FastifyReply): Promise<void> => {
-    const user: any = request.user;
-    const role = user?.role;
-
-    if (!role || !allowedRoles.includes(role)) {
+    if (!allowedRoles.includes(request.user.user.role)) {
       _reply.status(403).send({
         success: false,
         data: null,
