@@ -12,7 +12,7 @@ import { CreatePoolInput, PoolIdParams } from "../schemas/pool.schema";
 
 export const createPoolHandler = async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-        const leaderId = request.user.id;
+        const leaderId = request.user.user.id;
         const pool = await createPoolService(leaderId, request.body as CreatePoolInput);
 
         return reply.status(201).send({
@@ -67,7 +67,7 @@ export const getPoolHandler = async (
 
 export const listMyPoolsHandler = async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-        const userId = request.user.id;
+        const userId = request.user.user.id;
         const pools = await listMyPoolsService(userId);
 
         return reply.status(200).send({
@@ -88,7 +88,7 @@ export const joinPoolHandler = async (
     reply: FastifyReply,
 ) => {
     try {
-        const userId = request.user.id;
+        const userId = request.user.user.id;
         const membership = await joinPoolService(userId, request.params.id);
 
         return reply.status(201).send({
