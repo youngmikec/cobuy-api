@@ -67,6 +67,7 @@ model User {
 
   leadingPools     Pool[]       @relation("PoolLeader")
   beneficiaryPools Pool[]       @relation("PoolBeneficiary")
+  createdPools     Pool[]       @relation("PoolCreator")
   memberships      Membership[]
 
   @@map("users")
@@ -96,9 +97,10 @@ model Pool {
   description String?
   category    PoolCategory @default(Custom)
 
-  targetAmount      Int
+  targetAmount     Int
   amountRaised     Int     @default(0)
-  maxMembers            Int
+  maxMembers       Int
+  slotRemaining    Int     @default(0)
   splitEven             Boolean @default(true)
   memberShareAmount Int
 
@@ -114,6 +116,9 @@ model Pool {
   status     PoolStatus @default(OPEN)
 
   memberships Membership[]
+
+  createdById      String?
+  createdBy        User?   @relation("PoolCreator", fields: [createdById], references: [id])
 
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt

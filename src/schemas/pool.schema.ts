@@ -30,6 +30,11 @@ export const CreatePoolSchema = z
       .min(1)
       .max(255)
       .trim(),
+    beneficiaryAccountName: z
+      .string({ required_error: 'Beneficiary account name is required' })
+      .min(1)
+      .max(255)
+      .trim(),
     beneficiaryUserId: z.string().uuid().optional(),
     deadlineAt: z.coerce.date({ required_error: 'Deadline is required' }),
   })
@@ -46,5 +51,15 @@ export const PoolIdParamsSchema = z.object({
   id: z.string({ required_error: 'Pool id is required' }).uuid({ message: 'Invalid pool id' }),
 });
 
+export const JoinPoolSchema = z.object({
+  id: z.string({ required_error: 'Pool id is required' }).uuid({ message: 'Invalid pool id' }),
+  bankName: z.string({ required_error: 'Bank name is required' }).min(1).max(255).trim(),
+  bankCode: z.string({ required_error: 'Bank code is required' }).min(3).max(6).trim(),
+  accountNumber: z.string({ required_error: 'Account number is required' }).min(10).max(10).trim(),
+  accountName: z.string({ required_error: 'Account name is required' }).min(1).max(255).trim(),
+  memberShareAmount: z.number({ required_error: 'Member share amount is required' }).int().positive(),
+});
+
 export type CreatePoolInput = z.infer<typeof CreatePoolSchema>;
 export type PoolIdParams = z.infer<typeof PoolIdParamsSchema>;
+export type JoinPoolInput = z.infer<typeof JoinPoolSchema>;
