@@ -7,6 +7,6 @@ export const toPoolDto = (pool: PoolWithMemberCount) => {
 
   return {
     ...rest,
-    slotsRemaining: Math.max(pool.maxMembers - _count.memberships, 0),
+    slotsRemaining: pool.slotRemaining
   };
 };

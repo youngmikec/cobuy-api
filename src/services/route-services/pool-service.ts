@@ -28,6 +28,7 @@ export const createPoolService = async (leaderId: string, payload: CreatePoolInp
             splitEven,
             memberShareAmount,
             beneficiaryAccountNumber,
+            beneficiaryAccountName,
             beneficiaryBankName,
             beneficiaryUserId,
             deadlineAt,
@@ -44,22 +45,41 @@ export const createPoolService = async (leaderId: string, payload: CreatePoolInp
             ? Math.floor(targetAmount / maxMembers)
             : (memberShareAmount as number > 0) ? (memberShareAmount as number) : 0;
 
-        const pool = await prisma.pool.create({
-            data: {
-                leaderId,
-                name,
-                description: description ?? null,
-                category,
-                targetAmount,
-                maxMembers,
-                splitEven,
-                memberShareAmount: resolvedShareAmount,
-                beneficiaryAccountNumber,
-                beneficiaryBankName,
-                beneficiaryUserId: beneficiaryUserId ?? null,
-                deadlineAt,
-            },
-            include: poolInclude,
+        console.log({ slotRemaining: maxMembers - 1, resolvedShareAmount });
+
+        const {pool} = await prisma.$transaction(async (tx) => {
+            const pool = await tx.pool.create({
+                data: {
+                    leaderId,
+                    name,
+                    description: description ?? null,
+                    category,
+                    targetAmount,
+                    maxMembers,
+                    splitEven,
+                    slotRemaining: (maxMembers - 1),
+                    memberShareAmount: resolvedShareAmount,
+                    beneficiaryAccountNumber,
+                    beneficiaryBankName,
+                    beneficiaryAccountName,
+                    beneficiaryUserId: beneficiaryUserId ?? null,
+                    deadlineAt,
+                    createdById: leaderId,
+                },
+                include: poolInclude,
+            });
+
+            const membership = await tx.membership.create({
+                data: {
+                    poolId: pool.id,
+                    userId: leaderId,
+                    state: 'JOINED',
+                    joinedAt: new Date(),
+                },
+                include: { user: { select: memberUserSelect } },
+            });
+
+            return {pool, membership};
         });
 
         return {
@@ -160,10 +180,24 @@ export const joinPoolService = async (userId: string, poolId: string) => {
             throw new AppError(409, 'ALREADY_JOINED', `You have already joined this pool`);
         }
 
-        const membership = await prisma.membership.create({
-            data: { poolId, userId },
-            include: { user: { select: memberUserSelect } },
-        });
+        const [membership] = await prisma.$transaction([
+            prisma.membership.create({
+                data: {
+                    poolId,
+                    userId,
+                    state: 'JOINED',
+                    joinedAt: new Date(),
+                },
+                include: { user: { select: memberUserSelect } },
+            }),
+            prisma.pool.update({
+                where: { id: poolId },
+                data: { 
+                    slotRemaining: pool.slotRemaining > 0 ? { decrement: 1 } : 0,
+                    updatedAt: new Date() 
+                },
+            }),
+        ])  ;
 
         return membership;
     } catch (error: any) {

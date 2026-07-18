@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { authenticate, requireRole, ValidateSchema } from '../middlewares';
 import {
   CreatePoolSchema,
+  JoinPoolSchema,
   PoolIdParamsSchema,
   type PoolIdParams,
 } from '../schemas/pool.schema';
@@ -45,6 +46,15 @@ const poolProperties = {
   updatedAt: { type: 'string' },
   stateChangedAt: { type: 'string' },
 };
+
+const joinPoolProperties = {
+  id: { type: 'string' },
+  bankName: { type: 'string' },
+  bankCode: { type: 'string' },
+  accountNumber: { type: 'string' },
+  accountName: { type: 'string' },
+  memberShareAmount: { type: 'number' },
+}
 
 const memberProperties = {
   id: { type: 'string' },
@@ -210,17 +220,17 @@ export async function poolRoutes(app: FastifyInstance): Promise<void> {
 
   // POST /pools/:id/join — join a pool
   app.post<{ Params: PoolIdParams }>(
-    '/pools/:id/join',
+    '/pools/join',
     {
-      preHandler: [...requireAuth, requireRole(Role.Admin, Role.User), ValidateSchema(PoolIdParamsSchema, 'params')],
+      preHandler: [...requireAuth, requireRole(Role.Admin, Role.User), ValidateSchema(JoinPoolSchema, 'body')],
       attachValidation: true,
       schema: {
         tags: ['Pools'],
         summary: 'Join a pool',
         security: [{ bearerAuth: [] }],
-        params: {
+        body: {
           type: 'object',
-          properties: { id: { type: 'string', format: 'uuid' } },
+          properties: {...joinPoolProperties},
           required: ['id'],
         },
         response: {
