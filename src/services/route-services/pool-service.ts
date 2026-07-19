@@ -1,11 +1,16 @@
+import { PoolStatus, Prisma } from "@prisma/client";
 import { AppError } from "../../helpers/error";
 import { toPoolDto } from "../../helpers/pool";
 import prisma from "../../lib/prisma";
-import { CreatePoolInput } from "../../schemas/pool.schema";
+import { CreatePoolInput, ListPoolsQuery } from "../../schemas/pool.schema";
 
 const APP_BASE_URL = process.env['APP_BASE_URL'] ?? 'https://cobuy.app';
 
-const poolInclude = { _count: { select: { memberships: true } }, category: true } as const;
+const poolInclude = { 
+    _count: { select: { memberships: true } }, 
+    category: true,
+    leader: { select: { id: true, firstName: true, lastName: true, email: true }} 
+} as const;
 
 const DEFAULT_CATEGORY_NAME = 'Custom';
 
@@ -123,9 +128,17 @@ export const createPoolService = async (leaderId: string, payload: CreatePoolInp
     }
 }
 
-export const listPoolsService = async () => {
+export const listPoolsService = async (filters: ListPoolsQuery = {}) => {
     try {
+        const { status, search } = filters;
+
+        const where: Prisma.PoolWhereInput = {
+            ...(status ? { status: status as PoolStatus } : {}),
+            ...(search ? { name: { contains: search, mode: 'insensitive' } } : {}),
+        };
+
         const pools = await prisma.pool.findMany({
+            where,
             include: poolInclude,
             orderBy: { createdAt: 'desc' },
         });

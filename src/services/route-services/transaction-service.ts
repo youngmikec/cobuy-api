@@ -1,7 +1,6 @@
 import crypto from 'crypto';
 import { TransactionState } from "@prisma/client";
 import { AppError } from "../../helpers/error";
-import { fromKobo } from "../../helpers/monnify";
 import prisma from "../../lib/prisma";
 import { initTransaction } from "../third-party-services/monnify";
 
@@ -34,7 +33,7 @@ export interface MonnifyCollectionEventData {
     };
 }
 
-export const initiatePoolPaymentService = async (userId: string, poolId: string) => {
+export const initiatePoolPaymentService = async (userId: string, poolId: string, amount: number) => {
     try {
         const pool = await prisma.pool.findUnique({ where: { id: poolId } });
         if (!pool) {
@@ -68,7 +67,7 @@ export const initiatePoolPaymentService = async (userId: string, poolId: string)
         const paymentReference = `CB-${poolId}-${userId}-${nonce}`;
 
         const initResponse = await initTransaction({
-            amount: pool.memberShareAmount,
+            amount,
             paymentReference,
             customerName: `${membership.user.firstName} ${membership.user.lastName}`,
             customerEmail: membership.user.email,
@@ -82,7 +81,7 @@ export const initiatePoolPaymentService = async (userId: string, poolId: string)
                 membershipId: membership.id,
                 paymentReference: initResponse.paymentReference,
                 monnifyTransactionReference: initResponse.transactionReference,
-                amountExpected: pool.memberShareAmount,
+                amountExpected: amount,
                 state: 'PENDING',
             },
             include: transactionInclude,
@@ -149,7 +148,7 @@ export const processMonnifyCollectionWebhookService = async (eventData: MonnifyC
         return;
     }
 
-    const amountPaid = fromKobo(eventData.amountPaid);
+    const amountPaid = eventData.amountPaid;
     const state: TransactionState =
         amountPaid === transaction.amountExpected ? 'PAID' : amountPaid > transaction.amountExpected ? 'OVERPAID' : 'UNDERPAID';
 

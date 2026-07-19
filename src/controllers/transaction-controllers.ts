@@ -1,15 +1,16 @@
 import { FastifyReply, FastifyRequest } from "fastify";
 import { AppError } from "../helpers/error";
 import { initiatePoolPaymentService, listPoolTransactionsService } from "../services/route-services/transaction-service";
-import { PoolIdParams } from "../schemas/pool.schema";
+import { PayPoolShareInput, PoolIdParams } from "../schemas/pool.schema";
 
 export const payPoolShareHandler = async (
-    request: FastifyRequest<{ Params: PoolIdParams }>,
+    request: FastifyRequest<{ Body: PayPoolShareInput }>,
     reply: FastifyReply,
 ) => {
     try {
         const userId = request.user.user.id;
-        const transaction = await initiatePoolPaymentService(userId, request.params.id);
+        const { id: poolId, amount } = request.body;
+        const transaction = await initiatePoolPaymentService(userId, poolId, amount);
 
         return reply.status(201).send({
             success: true,
