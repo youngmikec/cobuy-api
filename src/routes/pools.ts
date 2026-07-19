@@ -4,8 +4,11 @@ import {
   CreatePoolSchema,
   JoinPoolSchema,
   ListPoolsQuerySchema,
+  PayPoolShareSchema,
   PoolIdParamsSchema,
+  type JoinPoolInput,
   type ListPoolsQuery,
+  type PayPoolShareInput,
   type PoolIdParams,
 } from '../schemas/pool.schema';
 import {
@@ -294,8 +297,8 @@ export async function poolRoutes(app: FastifyInstance): Promise<void> {
     getPoolHandler,
   );
 
-  // POST /pools/:id/join — join a pool
-  app.post<{ Params: PoolIdParams }>(
+  // POST /pools/join — join a pool
+  app.post<{ Body: JoinPoolInput }>(
     '/pools/join',
     {
       preHandler: [...requireAuth, requireRole(Role.Admin, Role.User), ValidateSchema(JoinPoolSchema, 'body')],
@@ -360,20 +363,23 @@ export async function poolRoutes(app: FastifyInstance): Promise<void> {
     listPoolMembersHandler,
   );
 
-  // POST /pools/:id/pay — initiate the current member's payment (dynamic virtual account)
-  app.post<{ Params: PoolIdParams }>(
-    '/pools/:id/pay',
+  // POST /pools/pay — initiate the current member's payment (dynamic virtual account)
+  app.post<{ Body: PayPoolShareInput }>(
+    '/pools/pay',
     {
-      preHandler: [...requireAuth, requireRole(Role.Admin, Role.User), ValidateSchema(PoolIdParamsSchema, 'params')],
+      preHandler: [...requireAuth, requireRole(Role.Admin, Role.User), ValidateSchema(PayPoolShareSchema, 'body')],
       attachValidation: true,
       schema: {
         tags: ['Pools'],
         summary: "Initiate the current member's payment for a pool",
         security: [{ bearerAuth: [] }],
-        params: {
+        body: {
           type: 'object',
-          properties: { id: { type: 'string', format: 'uuid' } },
-          required: ['id'],
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            amount: { type: 'number' },
+          },
+          required: ['id', 'amount'],
         },
         response: {
           201: {
