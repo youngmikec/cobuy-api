@@ -171,6 +171,7 @@ export async function poolRoutes(app: FastifyInstance): Promise<void> {
           },
           required: ['name', 'targetAmount', 'maxMembers', 'beneficiaryAccountNumber', 'beneficiaryAccountName', 'beneficiaryBankName', 'categoryId', 'beneficiaryBankCode', 'deadlineAt'],
         },
+        
         response: {
           201: {
             type: 'object',
