@@ -164,11 +164,12 @@ export async function poolRoutes(app: FastifyInstance): Promise<void> {
             memberShareAmount: { type: 'number' },
             beneficiaryAccountNumber: { type: 'string', minLength: 10, maxLength: 20 },
             beneficiaryBankName: { type: 'string', maxLength: 255 },
+            beneficiaryAccountName: { type: 'string', maxLength: 255 },
             beneficiaryBankCode: { type: 'string', minLength: 3, maxLength: 6 },
             beneficiaryUserId: { type: 'string', format: 'uuid' },
             deadlineAt: { type: 'string', format: 'date-time' },
           },
-          required: ['name', 'targetAmount', 'maxMembers', 'beneficiaryAccountNumber', 'beneficiaryBankName', 'beneficiaryBankCode', 'deadlineAt'],
+          required: ['name', 'targetAmount', 'maxMembers', 'beneficiaryAccountNumber', 'beneficiaryAccountName', 'beneficiaryBankName', 'categoryId', 'beneficiaryBankCode', 'deadlineAt'],
         },
         response: {
           201: {
