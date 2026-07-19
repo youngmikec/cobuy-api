@@ -11,6 +11,12 @@ export const generateMonnifyBase64AuthKey = (apiKey: string, secretKey: string):
 export const toKobo = (naira: number): number => Math.round(naira * 100);
 export const fromKobo = (kobo: number): number => Math.round(kobo / 100);
 
+// Per Monnify's docs: the `monnify-signature` header is only sent on webhooks
+// fired with production keys — sandbox notifications never include it, so
+// signature verification only makes sense once MONNIFY_ENV=production.
+export const isMonnifyProduction = (): boolean =>
+  (process.env['MONNIFY_ENV'] ?? 'sandbox').toLowerCase() === 'production';
+
 // Monnify signs every webhook with HMAC-SHA512 over the raw request body,
 // keyed with the account's secret key — verify before trusting any payload.
 export const verifyMonnifyWebhookSignature = (rawBody: string, signature: string | undefined): boolean => {

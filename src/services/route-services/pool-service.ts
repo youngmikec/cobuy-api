@@ -55,6 +55,7 @@ export const createPoolService = async (leaderId: string, payload: CreatePoolInp
             beneficiaryAccountNumber,
             beneficiaryAccountName,
             beneficiaryBankName,
+            beneficiaryBankCode,
             beneficiaryUserId,
             deadlineAt,
         } = payload;
@@ -88,6 +89,7 @@ export const createPoolService = async (leaderId: string, payload: CreatePoolInp
                     memberShareAmount: resolvedShareAmount,
                     beneficiaryAccountNumber,
                     beneficiaryBankName,
+                    beneficiaryBankCode,
                     beneficiaryAccountName,
                     beneficiaryUserId: beneficiaryUserId ?? null,
                     deadlineAt,

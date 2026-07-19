@@ -106,6 +106,9 @@ model Pool {
 
   beneficiaryAccountNumber String
   beneficiaryBankName      String
+  // Monnify bank code for beneficiaryBankName — nullable since pools created
+  // before this field existed have no value to backfill it from.
+  beneficiaryBankCode      String?
   beneficiaryAccountName   String?
   beneficiaryUserId        String?
   beneficiaryUser          User?   @relation("PoolBeneficiary", fields: [beneficiaryUserId], references: [id])
