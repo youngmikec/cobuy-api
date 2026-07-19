@@ -3,7 +3,9 @@ import { authenticate, requireRole, ValidateSchema } from '../middlewares';
 import {
   CreatePoolSchema,
   JoinPoolSchema,
+  ListPoolsQuerySchema,
   PoolIdParamsSchema,
+  type ListPoolsQuery,
   type PoolIdParams,
 } from '../schemas/pool.schema';
 import {
@@ -21,6 +23,15 @@ import { Role } from '@prisma/client';
 const poolProperties = {
   id: { type: 'string' },
   leaderId: { type: 'string' },
+  leader: {
+    type: 'object',
+    properties: {
+      id: { type: 'string' },
+      firstName: { type: 'string' },
+      lastName: { type: 'string' },
+      email: { type: 'string' },
+    },
+  },
   name: { type: 'string' },
   description: { type: ['string', 'null'] },
   categoryId: { type: 'string' },
@@ -35,8 +46,9 @@ const poolProperties = {
       updatedAt: { type: 'string' },
     },
   },
-  targetAmountKobo: { type: 'number' },
-  amountRaisedKobo: { type: 'number' },
+  targetAmount: { type: 'number' },
+  amountRaised: { type: 'number' },
+  amountPerSlot: { type: 'number' },
   maxMembers: { type: 'number' },
   splitEven: { type: 'boolean' },
   memberShareAmountKobo: { type: 'number' },
@@ -188,15 +200,26 @@ export async function poolRoutes(app: FastifyInstance): Promise<void> {
     createPoolHandler,
   );
 
-  // GET /pools — list all pools
-  app.get(
+  // GET /pools — list all pools, optionally filtered by status and/or name search
+  app.get<{ Querystring: ListPoolsQuery }>(
     '/pools',
     {
-      preHandler: [...requireAuth, requireRole(Role.Admin, Role.User)],
+      preHandler: [...requireAuth, requireRole(Role.Admin, Role.User), ValidateSchema(ListPoolsQuerySchema, 'query')],
+      attachValidation: true,
       schema: {
         tags: ['Pools'],
         summary: 'List all pools',
         security: [{ bearerAuth: [] }],
+        querystring: {
+          type: 'object',
+          properties: {
+            status: {
+              type: 'string',
+              enum: ['OPEN', 'ALMOSTFUL', 'CLOSED', 'FUNDED', 'DISBURSING', 'COMPLETED', 'EXPIRED', 'REFUNDING', 'REFUNDED'],
+            },
+            search: { type: 'string', maxLength: 255 },
+          },
+        },
         response: {
           200: {
             type: 'object',
@@ -206,6 +229,7 @@ export async function poolRoutes(app: FastifyInstance): Promise<void> {
               message: { type: 'string' },
             },
           },
+          400: { type: 'object', properties: errorProperties },
           ...authFailureResponses,
         },
       },

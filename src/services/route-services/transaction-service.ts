@@ -1,7 +1,6 @@
 import crypto from 'crypto';
 import { TransactionState } from "@prisma/client";
 import { AppError } from "../../helpers/error";
-import { fromKobo } from "../../helpers/monnify";
 import prisma from "../../lib/prisma";
 import { initTransaction } from "../third-party-services/monnify";
 
@@ -149,7 +148,7 @@ export const processMonnifyCollectionWebhookService = async (eventData: MonnifyC
         return;
     }
 
-    const amountPaid = fromKobo(eventData.amountPaid);
+    const amountPaid = eventData.amountPaid;
     const state: TransactionState =
         amountPaid === transaction.amountExpected ? 'PAID' : amountPaid > transaction.amountExpected ? 'OVERPAID' : 'UNDERPAID';
 
