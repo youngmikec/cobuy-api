@@ -4,6 +4,9 @@ import {
     GetBanksResponse,
     GetTransactionResponse,
     GetWalletBalanceResponse,
+    InitTransactionRequest,
+    InitTransactionResponse,
+    InitTransactionResponseBody,
     MonnifyResponse,
     MonnifyTransaction,
     MonnifyTransactionSearchParams,
@@ -16,6 +19,7 @@ import {
 const baseUrl: string = process.env['MONNIFY_BASE_URL'] ?? 'https://sandbox.monnify.com/api/v1';
 const apikey: string = process.env['MONNIFY_API_KEY'] ?? '';
 const secretKey: string = process.env['MONNIFY_SECRET_KEY'] ?? '';
+const contractCode: string = process.env['MONNIFY_MERCHANT_CODE'] ?? '';
 const defaultWalletAccountNumber: string = process.env['MONNIFY_MERCHANT_ACCOUNT_NUMBER'] ?? '';
 
 // baseUrl is pinned to /api/v1 (see above), but wallet/transaction-query
@@ -59,6 +63,45 @@ export const resolveBankAccount = async (accountNumber: string, bankCode: string
     };
     const response = await axios.get<ResolveBankAccountResponse>(url, { headers, params });
     return response.data;
+}
+
+/**
+ * POST /api/v1/merchant/transactions/init-transaction — generate a unique,
+ * time-boxed (~40 min) dynamic virtual account for a single contribution.
+ * `amountKobo` must already be in kobo (see helpers/monnify.ts#toKobo).
+ */
+export const initTransaction = async (params: {
+    amount: number;
+    paymentReference: string;
+    customerName: string;
+    customerEmail: string;
+    paymentDescription: string;
+    paymentMethods: string[]
+}): Promise<InitTransactionResponseBody> => {
+    console.log({ contractCode });
+    if (!contractCode) {
+        throw new Error('Set MONNIFY_MERCHANT_CODE to initiate transactions');
+    }
+
+    const url: string = `${baseUrl}/merchant/transactions/init-transaction`;
+    const authToken: string = await generateAuth();
+    const headers = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`,
+    };
+    const body: InitTransactionRequest = {
+        amount: params.amount,
+        currencyCode: 'NGN',
+        contractCode,
+        customerName: params.customerName,
+        customerEmail: params.customerEmail,
+        paymentReference: params.paymentReference,
+        paymentDescription: params.paymentDescription,
+        paymentMethods: params.paymentMethods
+    };
+
+    const response = await axios.post<InitTransactionResponse>(url, body, { headers });
+    return response.data.responseBody;
 }
 
 /**

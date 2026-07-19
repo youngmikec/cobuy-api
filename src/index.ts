@@ -67,6 +67,8 @@ export async function buildApp(): Promise<FastifyInstance> {
         { name: 'Auth', description: 'Authentication' },
         { name: 'Pools', description: 'Pool creation, membership, and listing' },
         { name: 'Banks', description: 'Bank list and account resolution (Monnify)' },
+        { name: 'Categories', description: 'Pool categories' },
+        { name: 'Webhooks', description: 'Inbound Monnify webhook events' },
       ],
       components: {
         securitySchemes: {
