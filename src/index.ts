@@ -16,6 +16,7 @@ dotenv.config();
 const PORT = parseInt(process.env['PORT'] ?? '3000', 10);
 const HOST = process.env['HOST'] ?? '0.0.0.0';
 const NODE_ENV = process.env['NODE_ENV'] ?? 'development';
+const APP_BASE_URL = process.env['APP_BASE_URL'] ?? 'https://cobuy.app';
 
 export async function buildApp(): Promise<FastifyInstance> {
   const fastify = Fastify({
@@ -60,7 +61,11 @@ export async function buildApp(): Promise<FastifyInstance> {
         description: 'API documentation for the Co-buy platform',
         version: '1.0.0',
       },
-      servers: [{ url: `http://${HOST}:${PORT}`, description: 'Current server' }],
+      servers: [
+        { url: `http://${HOST}:${PORT}`, description: 'Current server' },
+        { url: `http://localhost:${PORT}`, description: 'Local development' },
+        { url: APP_BASE_URL, description: 'Production' },
+      ],
       tags: [
         { name: 'Health', description: 'Service health checks' },
         { name: 'Users', description: 'User management' },
