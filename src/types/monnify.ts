@@ -70,6 +70,35 @@ export interface SearchTransactionsResponse extends MonnifyResponse {
     responseBody: MonnifyTransactionSearchResult;
 }
 
+export interface InitTransactionRequest {
+    amount: number;
+    currencyCode: 'NGN';
+    contractCode: string;
+    customerName: string;
+    customerEmail: string;
+    paymentReference: string;
+    paymentDescription: string;
+    paymentMethods: string[];
+    redirectUrl?: string;
+    merchantName?: string;
+    checkoutUrl?: string;
+}
+
+export interface InitTransactionResponseBody {
+    transactionReference: string;
+    paymentReference: string;
+    accountNumber: string;
+    accountBankCode: string;
+    accountBankName?: string;
+    expiresAt: string;
+    amount: number;
+    [key: string]: unknown;
+}
+
+export interface InitTransactionResponse extends MonnifyResponse {
+    responseBody: InitTransactionResponseBody;
+}
+
 export interface MonnifyTransactionSearchParams {
     paymentReference?: string;
     transactionReference?: string;

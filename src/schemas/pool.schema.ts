@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { PoolCategory } from '@prisma/client';
 
 export const CreatePoolSchema = z
   .object({
@@ -9,7 +8,8 @@ export const CreatePoolSchema = z
       .max(255, { message: 'Name must be at most 255 characters' })
       .trim(),
     description: z.string().max(2000).trim().optional(),
-    category: z.nativeEnum(PoolCategory).optional().default(PoolCategory.Custom),
+    // Defaults to the 'Custom' category when omitted — resolved in the service layer.
+    categoryId: z.string().uuid({ message: 'Invalid category id' }).optional(),
     targetAmount: z
       .number({ required_error: 'Target amount is required' })
       .int()
@@ -30,6 +30,16 @@ export const CreatePoolSchema = z
       .min(1)
       .max(255)
       .trim(),
+    beneficiaryBankCode: z
+      .string({ required_error: 'Beneficiary bank code is required' })
+      .min(3)
+      .max(6)
+      .trim(),
+    beneficiaryAccountName: z
+      .string({ required_error: 'Beneficiary account name is required' })
+      .min(1)
+      .max(255)
+      .trim(),
     beneficiaryUserId: z.string().uuid().optional(),
     deadlineAt: z.coerce.date({ required_error: 'Deadline is required' }),
   })
@@ -46,5 +56,15 @@ export const PoolIdParamsSchema = z.object({
   id: z.string({ required_error: 'Pool id is required' }).uuid({ message: 'Invalid pool id' }),
 });
 
+export const JoinPoolSchema = z.object({
+  id: z.string({ required_error: 'Pool id is required' }).uuid({ message: 'Invalid pool id' }),
+  bankName: z.string({ required_error: 'Bank name is required' }).min(1).max(255).trim(),
+  bankCode: z.string({ required_error: 'Bank code is required' }).min(3).max(6).trim(),
+  accountNumber: z.string({ required_error: 'Account number is required' }).min(10).max(10).trim(),
+  accountName: z.string({ required_error: 'Account name is required' }).min(1).max(255).trim(),
+  memberShareAmount: z.number({ required_error: 'Member share amount is required' }).int().positive(),
+});
+
 export type CreatePoolInput = z.infer<typeof CreatePoolSchema>;
 export type PoolIdParams = z.infer<typeof PoolIdParamsSchema>;
+export type JoinPoolInput = z.infer<typeof JoinPoolSchema>;

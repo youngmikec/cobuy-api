@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { authenticate, requireRole, ValidateSchema } from '../middlewares';
 import {
   CreatePoolSchema,
+  JoinPoolSchema,
   PoolIdParamsSchema,
   type PoolIdParams,
 } from '../schemas/pool.schema';
@@ -12,6 +13,8 @@ import {
   listMyPoolsHandler,
   listPoolMembersHandler,
   listPoolsHandler,
+  listPoolTransactionsHandler,
+  payPoolShareHandler,
 } from '../controllers/index';
 import { Role } from '@prisma/client';
 
@@ -20,9 +23,17 @@ const poolProperties = {
   leaderId: { type: 'string' },
   name: { type: 'string' },
   description: { type: ['string', 'null'] },
+  categoryId: { type: 'string' },
   category: {
-    type: 'string',
-    enum: ['BulkPurchase', 'Ajo', 'Fundraising', 'Repair', 'Investment', 'GroupGift', 'Education', 'Custom'],
+    type: 'object',
+    properties: {
+      id: { type: 'string' },
+      name: { type: 'string' },
+      description: { type: ['string', 'null'] },
+      isActive: { type: 'boolean' },
+      createdAt: { type: 'string' },
+      updatedAt: { type: 'string' },
+    },
   },
   targetAmountKobo: { type: 'number' },
   amountRaisedKobo: { type: 'number' },
@@ -31,6 +42,7 @@ const poolProperties = {
   memberShareAmountKobo: { type: 'number' },
   beneficiaryAccountNumber: { type: 'string' },
   beneficiaryBankName: { type: 'string' },
+  beneficiaryBankCode: { type: ['string', 'null'] },
   beneficiaryAccountName: { type: ['string', 'null'] },
   beneficiaryUserId: { type: ['string', 'null'] },
   shareToken: { type: 'string' },
@@ -45,6 +57,15 @@ const poolProperties = {
   updatedAt: { type: 'string' },
   stateChangedAt: { type: 'string' },
 };
+
+const joinPoolProperties = {
+  id: { type: 'string' },
+  bankName: { type: 'string' },
+  bankCode: { type: 'string' },
+  accountNumber: { type: 'string' },
+  accountName: { type: 'string' },
+  memberShareAmount: { type: 'number' },
+}
 
 const memberProperties = {
   id: { type: 'string' },
@@ -63,6 +84,47 @@ const memberProperties = {
       lastName: { type: 'string' },
       email: { type: 'string' },
       avatar: { type: ['string', 'null'] },
+    },
+  },
+};
+
+const transactionProperties = {
+  id: { type: 'string' },
+  poolId: { type: 'string' },
+  membershipId: { type: 'string' },
+  paymentReference: { type: 'string' },
+  monnifyTransactionReference: { type: ['string', 'null'] },
+  dynamicAccountNumber: { type: ['string', 'null'] },
+  dynamicAccountBankCode: { type: ['string', 'null'] },
+  dynamicAccountExpiresAt: { type: ['string', 'null'] },
+  amountExpected: { type: 'number' },
+  amountPaid: { type: ['number', 'null'] },
+  sourceAccountNumber: { type: ['string', 'null'] },
+  sourceBankCode: { type: ['string', 'null'] },
+  sourceAccountName: { type: ['string', 'null'] },
+  state: {
+    type: 'string',
+    enum: ['PENDING', 'PAID', 'OVERPAID', 'UNDERPAID', 'EXPIRED', 'FAILED'],
+  },
+  paidAt: { type: ['string', 'null'] },
+  createdAt: { type: 'string' },
+  updatedAt: { type: 'string' },
+  membership: {
+    type: 'object',
+    properties: {
+      id: { type: 'string' },
+      userId: { type: 'string' },
+      state: { type: 'string' },
+      user: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          firstName: { type: 'string' },
+          lastName: { type: 'string' },
+          email: { type: 'string' },
+          avatar: { type: ['string', 'null'] },
+        },
+      },
     },
   },
 };
@@ -95,20 +157,19 @@ export async function poolRoutes(app: FastifyInstance): Promise<void> {
           properties: {
             name: { type: 'string', maxLength: 255 },
             description: { type: 'string', maxLength: 2000 },
-            category: {
-              type: 'string',
-              enum: ['BulkPurchase', 'Ajo', 'Fundraising', 'Repair', 'Investment', 'GroupGift', 'Education', 'Custom'],
-            },
+            categoryId: { type: 'string', format: 'uuid' },
             targetAmount: { type: 'number' },
             maxMembers: { type: 'number' },
             splitEven: { type: 'boolean' },
             memberShareAmount: { type: 'number' },
             beneficiaryAccountNumber: { type: 'string', minLength: 10, maxLength: 20 },
             beneficiaryBankName: { type: 'string', maxLength: 255 },
+            beneficiaryAccountName: { type: 'string', maxLength: 255 },
+            beneficiaryBankCode: { type: 'string', minLength: 3, maxLength: 6 },
             beneficiaryUserId: { type: 'string', format: 'uuid' },
             deadlineAt: { type: 'string', format: 'date-time' },
           },
-          required: ['name', 'targetAmount', 'maxMembers', 'beneficiaryAccountNumber', 'beneficiaryBankName', 'deadlineAt'],
+          required: ['name', 'targetAmount', 'maxMembers', 'beneficiaryAccountNumber', 'beneficiaryAccountName', 'beneficiaryBankName', 'categoryId', 'beneficiaryBankCode', 'deadlineAt'],
         },
         response: {
           201: {
@@ -210,17 +271,17 @@ export async function poolRoutes(app: FastifyInstance): Promise<void> {
 
   // POST /pools/:id/join — join a pool
   app.post<{ Params: PoolIdParams }>(
-    '/pools/:id/join',
+    '/pools/join',
     {
-      preHandler: [...requireAuth, requireRole(Role.Admin, Role.User), ValidateSchema(PoolIdParamsSchema, 'params')],
+      preHandler: [...requireAuth, requireRole(Role.Admin, Role.User), ValidateSchema(JoinPoolSchema, 'body')],
       attachValidation: true,
       schema: {
         tags: ['Pools'],
         summary: 'Join a pool',
         security: [{ bearerAuth: [] }],
-        params: {
+        body: {
           type: 'object',
-          properties: { id: { type: 'string', format: 'uuid' } },
+          properties: {...joinPoolProperties},
           required: ['id'],
         },
         response: {
@@ -272,5 +333,79 @@ export async function poolRoutes(app: FastifyInstance): Promise<void> {
       },
     },
     listPoolMembersHandler,
+  );
+
+  // POST /pools/:id/pay — initiate the current member's payment (dynamic virtual account)
+  app.post<{ Params: PoolIdParams }>(
+    '/pools/:id/pay',
+    {
+      preHandler: [...requireAuth, requireRole(Role.Admin, Role.User), ValidateSchema(PoolIdParamsSchema, 'params')],
+      attachValidation: true,
+      schema: {
+        tags: ['Pools'],
+        summary: "Initiate the current member's payment for a pool",
+        security: [{ bearerAuth: [] }],
+        params: {
+          type: 'object',
+          properties: { id: { type: 'string', format: 'uuid' } },
+          required: ['id'],
+        },
+        response: {
+          201: {
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+              data: {
+                type: 'object',
+                properties: {
+                  transaction: { type: 'object', properties: transactionProperties },
+                  merchantName: { type: 'string' },
+                  checkoutUrl: { type: 'string' },
+                },
+              },
+              message: { type: 'string' },
+            },
+          },
+          400: { type: 'object', properties: errorProperties },
+          403: { type: 'object', properties: errorProperties },
+          404: { type: 'object', properties: errorProperties },
+          409: { type: 'object', properties: errorProperties },
+          ...authFailureResponses,
+        },
+      },
+    },
+    payPoolShareHandler,
+  );
+
+  // GET /pools/:id/transactions — list all payments made for a pool
+  app.get<{ Params: PoolIdParams }>(
+    '/pools/:id/transactions',
+    {
+      preHandler: [...requireAuth, requireRole(Role.Admin, Role.User), ValidateSchema(PoolIdParamsSchema, 'params')],
+      attachValidation: true,
+      schema: {
+        tags: ['Pools'],
+        summary: "List a pool's transactions/payments",
+        security: [{ bearerAuth: [] }],
+        params: {
+          type: 'object',
+          properties: { id: { type: 'string', format: 'uuid' } },
+          required: ['id'],
+        },
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+              data: { type: 'array', items: { type: 'object', properties: transactionProperties } },
+              message: { type: 'string' },
+            },
+          },
+          404: { type: 'object', properties: errorProperties },
+          ...authFailureResponses,
+        },
+      },
+    },
+    listPoolTransactionsHandler,
   );
 }

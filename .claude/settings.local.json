@@ -33,7 +33,9 @@
       "Bash(npx prisma *)",
       "WebFetch(domain:developers.brevo.com)",
       "WebFetch(domain:developers.monnify.com)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(cd *)",
+      "Bash(npx tsx -e ' *)"
     ]
   }
 }
