@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { PoolStatus } from '@prisma/client';
 
 export const CreatePoolSchema = z
   .object({
@@ -56,6 +57,12 @@ export const PoolIdParamsSchema = z.object({
   id: z.string({ required_error: 'Pool id is required' }).uuid({ message: 'Invalid pool id' }),
 });
 
+export const ListPoolsQuerySchema = z.object({
+  status: z.nativeEnum(PoolStatus, { errorMap: () => ({ message: 'Invalid pool status' }) }).optional(),
+  // Case-insensitive partial match against the pool name.
+  search: z.string().trim().min(1).max(255).optional(),
+});
+
 export const JoinPoolSchema = z.object({
   id: z.string({ required_error: 'Pool id is required' }).uuid({ message: 'Invalid pool id' }),
   bankName: z.string({ required_error: 'Bank name is required' }).min(1).max(255).trim(),
@@ -68,3 +75,4 @@ export const JoinPoolSchema = z.object({
 export type CreatePoolInput = z.infer<typeof CreatePoolSchema>;
 export type PoolIdParams = z.infer<typeof PoolIdParamsSchema>;
 export type JoinPoolInput = z.infer<typeof JoinPoolSchema>;
+export type ListPoolsQuery = z.infer<typeof ListPoolsQuerySchema>;

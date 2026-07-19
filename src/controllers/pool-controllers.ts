@@ -8,7 +8,7 @@ import {
     listPoolMembersService,
     listPoolsService,
 } from "../services/route-services/pool-service";
-import { CreatePoolInput, PoolIdParams } from "../schemas/pool.schema";
+import { CreatePoolInput, ListPoolsQuery, PoolIdParams } from "../schemas/pool.schema";
 
 export const createPoolHandler = async (request: FastifyRequest, reply: FastifyReply) => {
     try {
@@ -28,9 +28,12 @@ export const createPoolHandler = async (request: FastifyRequest, reply: FastifyR
     }
 }
 
-export const listPoolsHandler = async (_request: FastifyRequest, reply: FastifyReply) => {
+export const listPoolsHandler = async (
+    request: FastifyRequest<{ Querystring: ListPoolsQuery }>,
+    reply: FastifyReply,
+) => {
     try {
-        const pools = await listPoolsService();
+        const pools = await listPoolsService(request.query);
 
         return reply.status(200).send({
             success: true,
