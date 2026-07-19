@@ -99,6 +99,26 @@ export interface InitTransactionResponse extends MonnifyResponse {
     responseBody: InitTransactionResponseBody;
 }
 
+export interface InitiateRefundRequest {
+    refundReference: string;
+    transactionReference: string;
+    refundAmount: number;
+    refundReason: string;
+    customerNote: string;
+}
+
+export interface InitiateRefundResponseBody {
+    refundReference: string;
+    transactionReference: string;
+    refundAmount: number;
+    refundStatus: string;
+    [key: string]: unknown;
+}
+
+export interface InitiateRefundResponse extends MonnifyResponse {
+    responseBody: InitiateRefundResponseBody;
+}
+
 export interface MonnifyTransactionSearchParams {
     paymentReference?: string;
     transactionReference?: string;

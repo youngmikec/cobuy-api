@@ -9,6 +9,7 @@ import { registerRoutes } from './routes/index';
 import prisma from './lib/prisma';
 import { AppError } from './helpers/error';
 import { getRequiredEnv } from './helpers/env';
+import { startPoolDeadlineJob, stopPoolDeadlineJob } from './jobs/pool-deadline-job';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -153,6 +154,7 @@ async function start(): Promise<void> {
   const shutdown = async (signal: string): Promise<void> => {
     fastify.log.info(`Received ${signal}, starting graceful shutdown...`);
     try {
+      stopPoolDeadlineJob();
       await fastify.close();
       await prisma.$disconnect();
       fastify.log.info('Server closed successfully');
@@ -169,6 +171,7 @@ async function start(): Promise<void> {
   try {
     await fastify.listen({ port: PORT, host: HOST });
     fastify.log.info(`Server running in ${NODE_ENV} mode`);
+    startPoolDeadlineJob();
   } catch (err) {
     fastify.log.error(err);
     await prisma.$disconnect();

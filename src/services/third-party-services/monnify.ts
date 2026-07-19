@@ -4,6 +4,9 @@ import {
     GetBanksResponse,
     GetTransactionResponse,
     GetWalletBalanceResponse,
+    InitiateRefundRequest,
+    InitiateRefundResponse,
+    InitiateRefundResponseBody,
     InitTransactionRequest,
     InitTransactionResponse,
     InitTransactionResponseBody,
@@ -165,5 +168,36 @@ export const getWalletBalance = async (accountNumber: string = defaultWalletAcco
         'Authorization': `Bearer ${authToken}`,
     };
     const response = await axios.get<GetWalletBalanceResponse>(url, { headers, params: { accountNumber } });
+    return response.data.responseBody;
+}
+
+/**
+ * POST /api/v1/refunds/initiate-refund — refund a completed collection back
+ * to the account it originally came from. Monnify resolves the destination
+ * itself from `transactionReference`; no destination account is passed here
+ * (see .claude/skills/monnify/monnify-cobuy-skill.md section 4).
+ */
+export const initiateRefund = async (params: {
+    refundReference: string;
+    transactionReference: string;
+    amount: number;
+    refundReason: string;
+}): Promise<InitiateRefundResponseBody> => {
+    const url: string = `${baseUrl}/refunds/initiate-refund`;
+    const authToken: string = await generateAuth();
+    const headers = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`,
+    };
+    const body: InitiateRefundRequest = {
+        refundReference: params.refundReference,
+        transactionReference: params.transactionReference,
+        refundAmount: params.amount,
+        refundReason: params.refundReason,
+        // Shown on the recipient's bank alert — Monnify caps this at 16 chars.
+        customerNote: 'COBUY REFUND',
+    };
+
+    const response = await axios.post<InitiateRefundResponse>(url, body, { headers });
     return response.data.responseBody;
 }

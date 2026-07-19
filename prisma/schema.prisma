@@ -46,6 +46,12 @@ enum TransactionState {
   FAILED
 }
 
+enum RefundState {
+  INITIATED
+  COMPLETED
+  FAILED
+}
+
 model User {
   id           String    @id @default(uuid())
   avatar       String?
@@ -120,6 +126,7 @@ model Pool {
 
   memberships  Membership[]
   transactions Transaction[]
+  refunds      Refund[]
 
   createdById      String?
   createdBy        User?   @relation("PoolCreator", fields: [createdById], references: [id])
@@ -158,6 +165,7 @@ model Membership {
   joinedAt DateTime        @default(now())
 
   transactions Transaction[]
+  refunds      Refund[]
 
   @@unique([poolId, userId])
   @@map("memberships")
@@ -197,8 +205,43 @@ model Transaction {
   state  TransactionState @default(PENDING)
   paidAt DateTime?
 
+  refund Refund?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@map("transactions")
+}
+
+model Refund {
+  id String @id @default(uuid())
+
+  transactionId String     @unique
+  transaction   Transaction @relation(fields: [transactionId], references: [id])
+
+  poolId String
+  pool   Pool   @relation(fields: [poolId], references: [id])
+
+  membershipId String
+  membership   Membership @relation(fields: [membershipId], references: [id])
+
+  // Co-Buy-generated reference sent to Monnify ("CB-RF-{transactionId}-{nonce}").
+  refundReference String @unique
+  // Monnify's own reference, confirmed on the refund webhook.
+  monnifyRefundReference String?
+
+  amount Int
+
+  // Where the money goes back to — copied from the source Transaction's
+  // sourceAccountNumber/sourceBankCode at the time the refund is initiated.
+  destinationAccountNumber String
+  destinationBankCode      String
+
+  state       RefundState @default(INITIATED)
+  finalizedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("refunds")
 }

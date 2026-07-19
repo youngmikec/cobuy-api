@@ -3,12 +3,16 @@ import { isMonnifyProduction, verifyMonnifyWebhookSignature } from "../helpers/m
 import {
     markTransactionFailedService,
     processMonnifyCollectionWebhookService,
+    processMonnifyRefundWebhookService,
     type MonnifyCollectionEventData,
 } from "../services/route-services/transaction-service";
 
 interface MonnifyWebhookBody {
     eventType?: string;
-    eventData?: MonnifyCollectionEventData & { paymentReference?: string };
+    eventData?: Partial<MonnifyCollectionEventData> & {
+        paymentReference?: string;
+        refundReference?: string;
+    };
 }
 
 // Monnify expects a fast 200 and retries on anything else, so signature
@@ -31,7 +35,15 @@ export const monnifyWebhookHandler = async (request: FastifyRequest, reply: Fast
 
     try {
         if (body.eventType === 'SUCCESSFUL_TRANSACTION' && body.eventData) {
-            await processMonnifyCollectionWebhookService(body.eventData);
+            await processMonnifyCollectionWebhookService(body.eventData as MonnifyCollectionEventData);
+        } else if ((body.eventType === 'SUCCESSFUL_REFUND' || body.eventType === 'FAILED_REFUND') && body.eventData?.refundReference) {
+            const eventAmount = (body.eventData as { amount?: number }).amount;
+            await processMonnifyRefundWebhookService({
+                refundReference: body.eventData.refundReference,
+                status: body.eventType === 'SUCCESSFUL_REFUND' ? 'COMPLETED' : 'FAILED',
+                ...(body.eventData.transactionReference ? { transactionReference: body.eventData.transactionReference } : {}),
+                ...(eventAmount !== undefined ? { amount: eventAmount } : {}),
+            });
         } else if (body.eventData?.paymentReference) {
             await markTransactionFailedService(body.eventData.paymentReference);
         } else {

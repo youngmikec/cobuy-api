@@ -222,6 +222,11 @@ export const joinPoolService = async (userId: string, poolId: string) => {
             throw new AppError(409, 'ALREADY_JOINED', `You have already joined this pool`);
         }
 
+        // Computed ahead of the update so the same write can flip status to
+        // CLOSED the instant the last slot is taken — no deadline job needed
+        // to stop further joins.
+        const remainingAfterJoin = Math.max(pool.slotRemaining - 1, 0);
+
         const [membership] = await prisma.$transaction([
             prisma.membership.create({
                 data: {
@@ -234,9 +239,10 @@ export const joinPoolService = async (userId: string, poolId: string) => {
             }),
             prisma.pool.update({
                 where: { id: poolId },
-                data: { 
-                    slotRemaining: pool.slotRemaining > 0 ? { decrement: 1 } : 0,
-                    updatedAt: new Date() 
+                data: {
+                    slotRemaining: remainingAfterJoin,
+                    ...(remainingAfterJoin === 0 ? { status: 'CLOSED' } : {}),
+                    updatedAt: new Date(),
                 },
             }),
         ])  ;
