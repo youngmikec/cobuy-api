@@ -21,6 +21,7 @@ const apikey: string = process.env['MONNIFY_API_KEY'] ?? '';
 const secretKey: string = process.env['MONNIFY_SECRET_KEY'] ?? '';
 const contractCode: string = process.env['MONNIFY_MERCHANT_CODE'] ?? '';
 const defaultWalletAccountNumber: string = process.env['MONNIFY_MERCHANT_ACCOUNT_NUMBER'] ?? '';
+const redirectUrl: string = process.env['MONNIFY_REDIRECT_URL'] ?? '';
 
 // baseUrl is pinned to /api/v1 (see above), but wallet/transaction-query
 // endpoints live under /api/v2 — derive a bare root so those can build
@@ -97,7 +98,8 @@ export const initTransaction = async (params: {
         customerEmail: params.customerEmail,
         paymentReference: params.paymentReference,
         paymentDescription: params.paymentDescription,
-        paymentMethods: params.paymentMethods
+        paymentMethods: params.paymentMethods,
+        redirectUrl: redirectUrl
     };
 
     const response = await axios.post<InitTransactionResponse>(url, body, { headers });
