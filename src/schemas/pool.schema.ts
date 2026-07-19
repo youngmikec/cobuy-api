@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { PoolCategory } from '@prisma/client';
 
 export const CreatePoolSchema = z
   .object({
@@ -9,7 +8,8 @@ export const CreatePoolSchema = z
       .max(255, { message: 'Name must be at most 255 characters' })
       .trim(),
     description: z.string().max(2000).trim().optional(),
-    category: z.nativeEnum(PoolCategory).optional().default(PoolCategory.Custom),
+    // Defaults to the 'Custom' category when omitted — resolved in the service layer.
+    categoryId: z.string().uuid({ message: 'Invalid category id' }).optional(),
     targetAmount: z
       .number({ required_error: 'Target amount is required' })
       .int()

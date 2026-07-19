@@ -5,7 +5,32 @@ import { CreatePoolInput } from "../../schemas/pool.schema";
 
 const APP_BASE_URL = process.env['APP_BASE_URL'] ?? 'https://cobuy.app';
 
-const poolInclude = { _count: { select: { memberships: true } } } as const;
+const poolInclude = { _count: { select: { memberships: true } }, category: true } as const;
+
+const DEFAULT_CATEGORY_NAME = 'Custom';
+
+// Resolves the categoryId a pool should be created with: the given id (must
+// exist and be active) or, when omitted, the seeded 'Custom' category —
+// mirroring the old PoolCategory enum's @default(Custom) behavior.
+const resolveCategoryId = async (categoryId: string | undefined): Promise<string> => {
+    if (!categoryId) {
+        const defaultCategory = await prisma.category.findUnique({ where: { name: DEFAULT_CATEGORY_NAME } });
+        if (!defaultCategory) {
+            throw new AppError(500, 'SERVER_ERROR', `Default category '${DEFAULT_CATEGORY_NAME}' is not seeded`);
+        }
+        return defaultCategory.id;
+    }
+
+    const category = await prisma.category.findUnique({ where: { id: categoryId } });
+    if (!category) {
+        throw new AppError(404, 'NOT_FOUND', `Category with id '${categoryId}' not found`);
+    }
+    if (!category.isActive) {
+        throw new AppError(400, 'CATEGORY_INACTIVE', `Category '${category.name}' is not active`);
+    }
+
+    return category.id;
+};
 
 const memberUserSelect = {
     id: true,
@@ -22,7 +47,7 @@ export const createPoolService = async (leaderId: string, payload: CreatePoolInp
         const {
             name,
             description,
-            category,
+            categoryId,
             targetAmount,
             maxMembers,
             splitEven,
@@ -41,6 +66,8 @@ export const createPoolService = async (leaderId: string, payload: CreatePoolInp
             }
         }
 
+        const resolvedCategoryId = await resolveCategoryId(categoryId);
+
         const resolvedShareAmount = splitEven
             ? Math.floor(targetAmount / maxMembers)
             : (memberShareAmount as number > 0) ? (memberShareAmount as number) : 0;
@@ -53,7 +80,7 @@ export const createPoolService = async (leaderId: string, payload: CreatePoolInp
                     leaderId,
                     name,
                     description: description ?? null,
-                    category,
+                    categoryId: resolvedCategoryId,
                     targetAmount,
                     maxMembers,
                     splitEven,

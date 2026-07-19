@@ -16,17 +16,6 @@ enum Role {
   Admin
 }
 
-enum PoolCategory {
-  BulkPurchase
-  Ajo
-  Fundraising
-  Repair
-  Investment
-  GroupGift
-  Education
-  Custom
-}
-
 enum PoolStatus {
   OPEN
   ALMOSTFUL
@@ -46,6 +35,15 @@ enum MembershipState {
   REFUND_PENDING
   REFUNDED
   REFUND_FAILED
+}
+
+enum TransactionState {
+  PENDING
+  PAID
+  OVERPAID
+  UNDERPAID
+  EXPIRED
+  FAILED
 }
 
 model User {
@@ -95,7 +93,9 @@ model Pool {
 
   name        String
   description String?
-  category    PoolCategory @default(Custom)
+
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id])
 
   targetAmount     Int
   amountRaised     Int     @default(0)
@@ -115,7 +115,8 @@ model Pool {
   deadlineAt DateTime
   status     PoolStatus @default(OPEN)
 
-  memberships Membership[]
+  memberships  Membership[]
+  transactions Transaction[]
 
   createdById      String?
   createdBy        User?   @relation("PoolCreator", fields: [createdById], references: [id])
@@ -125,6 +126,20 @@ model Pool {
   stateChangedAt DateTime @default(now())
 
   @@map("pools")
+}
+
+model Category {
+  id          String  @id @default(uuid())
+  name        String  @unique
+  description String?
+  isActive    Boolean @default(true)
+
+  pools Pool[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("categories")
 }
 
 model Membership {
@@ -139,6 +154,48 @@ model Membership {
   state    MembershipState @default(JOINED)
   joinedAt DateTime        @default(now())
 
+  transactions Transaction[]
+
   @@unique([poolId, userId])
   @@map("memberships")
+}
+
+model Transaction {
+  id String @id @default(uuid())
+
+  poolId String
+  pool   Pool   @relation(fields: [poolId], references: [id])
+
+  membershipId String
+  membership   Membership @relation(fields: [membershipId], references: [id])
+
+  // Co-Buy-generated reference (e.g. "CB-{poolId}-{userId}-{nonce}"), sent to
+  // Monnify at init and echoed back on every webhook — the primary lookup key.
+  paymentReference String @unique
+  // Monnify's own reference for the transaction, known once init-transaction
+  // responds (and reconfirmed on the webhook).
+  monnifyTransactionReference String? @unique
+
+  dynamicAccountNumber    String?
+  dynamicAccountBankCode  String?
+  dynamicAccountExpiresAt DateTime?
+
+  // Amounts are stored in Naira, matching Pool.targetAmount/memberShareAmount —
+  // converted to/from kobo only at the Monnify API boundary.
+  amountExpected Int
+  amountPaid     Int?
+
+  // Payer's source account, captured from the collection webhook — this is
+  // where a refund would be sent if the pool later fails to fund.
+  sourceAccountNumber String?
+  sourceBankCode      String?
+  sourceAccountName   String?
+
+  state  TransactionState @default(PENDING)
+  paidAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("transactions")
 }
