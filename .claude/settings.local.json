@@ -34,7 +34,8 @@
       "WebFetch(domain:developers.brevo.com)",
       "WebFetch(domain:developers.monnify.com)",
       "WebSearch",
-      "Bash(cd *)"
+      "Bash(cd *)",
+      "Bash(npx tsx -e ' *)"
     ]
   }
 }

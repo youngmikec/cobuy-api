@@ -1,5 +1,5 @@
 import { FastifyReply, FastifyRequest } from "fastify";
-import { verifyMonnifyWebhookSignature } from "../helpers/monnify";
+import { isMonnifyProduction, verifyMonnifyWebhookSignature } from "../helpers/monnify";
 import {
     markTransactionFailedService,
     processMonnifyCollectionWebhookService,
@@ -15,12 +15,16 @@ interface MonnifyWebhookBody {
 // failures and processing errors are logged, never surfaced as non-2xx —
 // see .claude/skills/monnify/monnify-cobuy-skill.md section 7.
 export const monnifyWebhookHandler = async (request: FastifyRequest, reply: FastifyReply) => {
-    const signature = request.headers['monnify-signature'] as string | undefined;
-    const rawBody = request.rawBody;
+    // Sandbox webhooks don't carry a monnify-signature header at all (per
+    // Monnify's docs), so there's nothing to verify until MONNIFY_ENV=production.
+    if (isMonnifyProduction()) {
+        const signature = request.headers['monnify-signature'] as string | undefined;
+        const rawBody = request.rawBody;
 
-    if (!rawBody || !verifyMonnifyWebhookSignature(rawBody.toString('utf8'), signature)) {
-        request.log.warn('Monnify webhook signature verification failed');
-        return reply.status(200).send({ received: true });
+        if (!rawBody || !verifyMonnifyWebhookSignature(rawBody.toString('utf8'), signature)) {
+            request.log.warn('Monnify webhook signature verification failed');
+            return reply.status(200).send({ received: true });
+        }
     }
 
     const body = request.body as MonnifyWebhookBody;

@@ -30,6 +30,11 @@ export const CreatePoolSchema = z
       .min(1)
       .max(255)
       .trim(),
+    beneficiaryBankCode: z
+      .string({ required_error: 'Beneficiary bank code is required' })
+      .min(3)
+      .max(6)
+      .trim(),
     beneficiaryAccountName: z
       .string({ required_error: 'Beneficiary account name is required' })
       .min(1)
