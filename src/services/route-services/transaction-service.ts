@@ -416,7 +416,28 @@ export const processMonnifyRefundWebhookService = async (eventData: MonnifyRefun
         where: { membershipId: refund.membershipId, state: { not: 'COMPLETED' } },
     });
     if (outstandingOnMembership === 0) {
-        await prisma.membership.update({ where: { id: refund.membershipId }, data: { state: 'REFUNDED' } });
+        const membership = await prisma.membership.update({ where: { id: refund.membershipId }, data: { state: 'REFUNDED' } });
+
+        // Sum rather than use this event's refund.amount alone — a membership
+        // can in principle have more than one Refund row (one per Transaction),
+        // so this is the total actually returned to the member.
+        const { _sum } = await prisma.refund.aggregate({
+            where: { membershipId: refund.membershipId, state: 'COMPLETED' },
+            _sum: { amount: true },
+        });
+        const totalRefunded = _sum.amount ?? refund.amount;
+
+        try {
+            await createNotificationService({
+                userId: membership.userId,
+                type: 'REFUND_RECEIVED',
+                title: 'Refund received',
+                message: `Your refund of ₦${totalRefunded.toLocaleString()} has been processed.`,
+                poolId: refund.poolId,
+            });
+        } catch (error: any) {
+            console.error(`Failed to create REFUND_RECEIVED notification for user ${membership.userId}:`, error.message);
+        }
     }
 
     // Flip the pool once every refund issued for it is COMPLETED — members who

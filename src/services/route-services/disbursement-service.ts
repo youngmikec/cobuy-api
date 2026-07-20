@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import { DisbursementState } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { initiateSingleTransfer, resolveBankAccount } from "../third-party-services/monnify";
-import { notifyPoolMembersService } from "./notification-service";
+import { createNotificationService, notifyPoolMembersService } from "./notification-service";
 
 const PLATFORM_FEE_PERCENT = parseFloat(process.env['PLATFORM_FEE_PERCENT'] ?? '2');
 
@@ -141,6 +141,23 @@ export const processMonnifyDisbursementWebhookService = async (eventData: Monnif
             });
         } catch (error: any) {
             console.error(`Failed to fan out POOL_STATUS_CHANGED notifications for pool ${disbursement.poolId}:`, error.message);
+        }
+
+        // Dedicated notification for the beneficiary specifically — they may
+        // not be a pool member (beneficiaryUserId is independent of
+        // Membership), so the fan-out above won't necessarily reach them.
+        if (pool.beneficiaryUserId) {
+            try {
+                await createNotificationService({
+                    userId: pool.beneficiaryUserId,
+                    type: 'DISBURSEMENT_RECEIVED',
+                    title: 'Payout received',
+                    message: `₦${disbursement.netAmount.toLocaleString()} from "${pool.name}" has been sent to your account.`,
+                    poolId: disbursement.poolId,
+                });
+            } catch (error: any) {
+                console.error(`Failed to create DISBURSEMENT_RECEIVED notification for user ${pool.beneficiaryUserId}:`, error.message);
+            }
         }
     }
 }
