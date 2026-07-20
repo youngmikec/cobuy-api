@@ -57,6 +57,8 @@ enum NotificationType {
   POOL_CREATED
   PAYMENT_RECEIVED
   POOL_STATUS_CHANGED
+  REFUND_RECEIVED
+  DISBURSEMENT_RECEIVED
 }
 
 enum DisbursementState {
