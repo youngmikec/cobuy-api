@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { DisbursementState } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { initiateSingleTransfer, resolveBankAccount } from "../third-party-services/monnify";
+import { notifyPoolMembersService } from "./notification-service";
 
 const PLATFORM_FEE_PERCENT = parseFloat(process.env['PLATFORM_FEE_PERCENT'] ?? '2');
 
@@ -50,6 +51,17 @@ export const disburseToBeneficiaryService = async (poolId: string): Promise<void
 
     if (pool.status !== 'DISBURSING') {
         await prisma.pool.update({ where: { id: poolId }, data: { status: 'DISBURSING', stateChangedAt: new Date() } });
+
+        try {
+            await notifyPoolMembersService({
+                poolId,
+                type: 'POOL_STATUS_CHANGED',
+                title: 'Pool payout in progress',
+                message: `"${pool.name}" is now being disbursed to the beneficiary.`,
+            });
+        } catch (error: any) {
+            console.error(`Failed to fan out POOL_STATUS_CHANGED notifications for pool ${poolId}:`, error.message);
+        }
     }
 
     const grossAmount = pool.amountRaised;
@@ -115,6 +127,20 @@ export const processMonnifyDisbursementWebhookService = async (eventData: Monnif
     });
 
     if (state === 'SUCCESS') {
-        await prisma.pool.update({ where: { id: disbursement.poolId }, data: { status: 'COMPLETED', stateChangedAt: new Date() } });
+        const pool = await prisma.pool.update({
+            where: { id: disbursement.poolId },
+            data: { status: 'COMPLETED', stateChangedAt: new Date() },
+        });
+
+        try {
+            await notifyPoolMembersService({
+                poolId: disbursement.poolId,
+                type: 'POOL_STATUS_CHANGED',
+                title: 'Pool completed',
+                message: `"${pool.name}" has been successfully paid out to the beneficiary. This pool is now complete.`,
+            });
+        } catch (error: any) {
+            console.error(`Failed to fan out POOL_STATUS_CHANGED notifications for pool ${disbursement.poolId}:`, error.message);
+        }
     }
 }

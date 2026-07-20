@@ -12,7 +12,7 @@ import { listAllNotificationsHandler, listNotificationsHandler, markNotification
 const notificationProperties = {
   id: { type: 'string' },
   userId: { type: 'string' },
-  type: { type: 'string', enum: ['ADDED_TO_POOL'] },
+  type: { type: 'string', enum: ['ADDED_TO_POOL', 'POOL_CREATED', 'PAYMENT_RECEIVED', 'POOL_STATUS_CHANGED'] },
   title: { type: 'string' },
   message: { type: 'string' },
   poolId: { type: ['string', 'null'] },

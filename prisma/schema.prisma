@@ -54,6 +54,9 @@ enum RefundState {
 
 enum NotificationType {
   ADDED_TO_POOL
+  POOL_CREATED
+  PAYMENT_RECEIVED
+  POOL_STATUS_CHANGED
 }
 
 enum DisbursementState {
