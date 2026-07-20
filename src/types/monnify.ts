@@ -119,6 +119,34 @@ export interface InitiateRefundResponse extends MonnifyResponse {
     responseBody: InitiateRefundResponseBody;
 }
 
+export interface InitiateSingleTransferRequest {
+    amount: number;
+    reference: string;
+    narration: string;
+    destinationBankCode: string;
+    destinationAccountNumber: string;
+    currency: 'NGN';
+    async: true;
+    destinationAccountName?: string;
+    sourceAccountNumber?: string;
+}
+
+export interface InitiateSingleTransferResponseBody {
+    reference: string;
+    status: string;
+    amount: number;
+    dateCreated?: string;
+    destinationAccountNumber: string;
+    destinationBankCode: string;
+    destinationAccountName?: string;
+    transactionReference?: string;
+    [key: string]: unknown;
+}
+
+export interface InitiateSingleTransferResponse extends MonnifyResponse {
+    responseBody: InitiateSingleTransferResponseBody;
+}
+
 export interface MonnifyTransactionSearchParams {
     paymentReference?: string;
     transactionReference?: string;

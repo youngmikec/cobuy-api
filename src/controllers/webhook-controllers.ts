@@ -6,12 +6,15 @@ import {
     processMonnifyRefundWebhookService,
     type MonnifyCollectionEventData,
 } from "../services/route-services/transaction-service";
+import { processMonnifyDisbursementWebhookService } from "../services/route-services/disbursement-service";
 
 interface MonnifyWebhookBody {
     eventType?: string;
     eventData?: Partial<MonnifyCollectionEventData> & {
         paymentReference?: string;
         refundReference?: string;
+        reference?: string;
+        transactionRef?: string;
     };
 }
 
@@ -43,6 +46,15 @@ export const monnifyWebhookHandler = async (request: FastifyRequest, reply: Fast
                 status: body.eventType === 'SUCCESSFUL_REFUND' ? 'COMPLETED' : 'FAILED',
                 ...(body.eventData.transactionReference ? { transactionReference: body.eventData.transactionReference } : {}),
                 ...(eventAmount !== undefined ? { amount: eventAmount } : {}),
+            });
+        } else if (
+            (body.eventType === 'SUCCESSFUL_DISBURSEMENT' || body.eventType === 'FAILED_DISBURSEMENT') &&
+            body.eventData?.reference
+        ) {
+            await processMonnifyDisbursementWebhookService({
+                reference: body.eventData.reference,
+                status: body.eventType === 'SUCCESSFUL_DISBURSEMENT' ? 'SUCCESS' : 'FAILED',
+                ...(body.eventData.transactionRef ? { transactionRef: body.eventData.transactionRef } : {}),
             });
         } else if (body.eventData?.paymentReference) {
             await markTransactionFailedService(body.eventData.paymentReference);

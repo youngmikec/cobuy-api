@@ -3,6 +3,7 @@ import { RefundState, TransactionState } from "@prisma/client";
 import { AppError } from "../../helpers/error";
 import prisma from "../../lib/prisma";
 import { initiateRefund, initTransaction } from "../third-party-services/monnify";
+import { disburseToBeneficiaryService } from "./disbursement-service";
 
 const memberUserSelect = {
     id: true,
@@ -111,18 +112,39 @@ export const initiatePoolPaymentService = async (userId: string, poolId: string,
     }
 }
 
-export const listPoolTransactionsService = async (poolId: string) => {
+// A pool's full money ledger: contributions in, refunds back out (if it
+// expired unfunded), and the payout to the beneficiary (if it hit target).
+// Restricted to the pool's own members/leader (or an Admin) — not open to
+// any authenticated user like the other pool endpoints.
+export const listPoolTransactionsService = async (poolId: string, userId: string, isAdmin: boolean) => {
     try {
         const pool = await prisma.pool.findUnique({ where: { id: poolId } });
         if (!pool) {
             throw new AppError(404, 'NOT_FOUND', `Pool with id '${poolId}' not found`);
         }
 
-        return await prisma.transaction.findMany({
-            where: { poolId },
-            include: transactionInclude,
-            orderBy: { createdAt: 'desc' },
-        });
+        if (!isAdmin && pool.leaderId !== userId) {
+            const membership = await prisma.membership.findUnique({ where: { poolId_userId: { poolId, userId } } });
+            if (!membership) {
+                throw new AppError(403, 'FORBIDDEN', `Only members of this pool can view its transactions`);
+            }
+        }
+
+        const [transactions, refunds, disbursement] = await Promise.all([
+            prisma.transaction.findMany({
+                where: { poolId },
+                include: transactionInclude,
+                orderBy: { createdAt: 'desc' },
+            }),
+            prisma.refund.findMany({
+                where: { poolId },
+                include: { membership: { include: { user: { select: memberUserSelect } } } },
+                orderBy: { createdAt: 'desc' },
+            }),
+            prisma.disbursement.findUnique({ where: { poolId } }),
+        ]);
+
+        return { transactions, refunds, disbursement };
     } catch (error: any) {
         if (error instanceof AppError) {
             throw error;
@@ -157,7 +179,7 @@ export const processMonnifyCollectionWebhookService = async (eventData: MonnifyC
     const state: TransactionState =
         amountPaid === transaction.amountExpected ? 'PAID' : amountPaid > transaction.amountExpected ? 'OVERPAID' : 'UNDERPAID';
 
-    await prisma.$transaction(async (tx) => {
+    const targetMet = await prisma.$transaction(async (tx) => {
         await tx.transaction.update({
             where: { id: transaction.id },
             data: {
@@ -176,11 +198,27 @@ export const processMonnifyCollectionWebhookService = async (eventData: MonnifyC
             data: { state: 'PAID' },
         });
 
+        const pool = await tx.pool.findUnique({ where: { id: transaction.poolId } });
+        const newAmountRaised = (pool?.amountRaised ?? 0) + amountPaid;
+        const justMetTarget = !!pool && newAmountRaised >= pool.targetAmount && pool.status !== 'FUNDED';
+
         await tx.pool.update({
             where: { id: transaction.poolId },
-            data: { amountRaised: { increment: amountPaid } },
+            data: {
+                amountRaised: { increment: amountPaid },
+                // Reaching target is immediate and independent of the CLOSED
+                // (slots-full) status — that's what previously left funded
+                // pools stuck on CLOSED instead of progressing.
+                ...(justMetTarget ? { status: 'FUNDED', stateChangedAt: new Date() } : {}),
+            },
         });
+
+        return justMetTarget;
     });
+
+    if (targetMet) {
+        await disburseToBeneficiaryService(transaction.poolId);
+    }
 }
 
 // Best-effort: mark a still-pending transaction FAILED when Monnify reports

@@ -147,6 +147,63 @@ const transactionProperties = {
   },
 };
 
+const refundProperties = {
+  id: { type: 'string' },
+  transactionId: { type: 'string' },
+  poolId: { type: 'string' },
+  membershipId: { type: 'string' },
+  refundReference: { type: 'string' },
+  monnifyRefundReference: { type: ['string', 'null'] },
+  amount: { type: 'number' },
+  destinationAccountNumber: { type: 'string' },
+  destinationBankCode: { type: 'string' },
+  state: {
+    type: 'string',
+    enum: ['INITIATED', 'COMPLETED', 'FAILED'],
+  },
+  finalizedAt: { type: ['string', 'null'] },
+  createdAt: { type: 'string' },
+  updatedAt: { type: 'string' },
+  membership: {
+    type: 'object',
+    properties: {
+      id: { type: 'string' },
+      userId: { type: 'string' },
+      state: { type: 'string' },
+      user: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          firstName: { type: 'string' },
+          lastName: { type: 'string' },
+          email: { type: 'string' },
+          avatar: { type: ['string', 'null'] },
+        },
+      },
+    },
+  },
+};
+
+const disbursementProperties = {
+  id: { type: 'string' },
+  poolId: { type: 'string' },
+  disbursementReference: { type: 'string' },
+  monnifyReference: { type: ['string', 'null'] },
+  grossAmount: { type: 'number' },
+  feeAmount: { type: 'number' },
+  netAmount: { type: 'number' },
+  destinationAccountNumber: { type: 'string' },
+  destinationBankCode: { type: 'string' },
+  destinationAccountName: { type: ['string', 'null'] },
+  state: {
+    type: 'string',
+    enum: ['INITIATED', 'SUCCESS', 'FAILED', 'REVERSED'],
+  },
+  finalizedAt: { type: ['string', 'null'] },
+  createdAt: { type: 'string' },
+  updatedAt: { type: 'string' },
+};
+
 const errorProperties = {
   success: { type: 'boolean' },
   data: { type: 'null' },
@@ -411,7 +468,8 @@ export async function poolRoutes(app: FastifyInstance): Promise<void> {
     payPoolShareHandler,
   );
 
-  // GET /pools/:id/transactions — list all payments made for a pool
+  // GET /pools/:id/transactions — a pool's full money ledger: payments,
+  // refunds, and the beneficiary payout (members/leader/Admin only)
   app.get<{ Params: PoolIdParams }>(
     '/pools/:id/transactions',
     {
@@ -419,7 +477,7 @@ export async function poolRoutes(app: FastifyInstance): Promise<void> {
       attachValidation: true,
       schema: {
         tags: ['Pools'],
-        summary: "List a pool's transactions/payments",
+        summary: "List a pool's transactions, refunds, and beneficiary disbursement",
         security: [{ bearerAuth: [] }],
         params: {
           type: 'object',
@@ -431,10 +489,18 @@ export async function poolRoutes(app: FastifyInstance): Promise<void> {
             type: 'object',
             properties: {
               success: { type: 'boolean' },
-              data: { type: 'array', items: { type: 'object', properties: transactionProperties } },
+              data: {
+                type: 'object',
+                properties: {
+                  transactions: { type: 'array', items: { type: 'object', properties: transactionProperties } },
+                  refunds: { type: 'array', items: { type: 'object', properties: refundProperties } },
+                  disbursement: { type: ['object', 'null'], properties: disbursementProperties },
+                },
+              },
               message: { type: 'string' },
             },
           },
+          403: { type: 'object', properties: errorProperties },
           404: { type: 'object', properties: errorProperties },
           ...authFailureResponses,
         },
