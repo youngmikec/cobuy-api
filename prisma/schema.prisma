@@ -52,6 +52,10 @@ enum RefundState {
   FAILED
 }
 
+enum NotificationType {
+  ADDED_TO_POOL
+}
+
 model User {
   id           String    @id @default(uuid())
   avatar       String?
@@ -73,6 +77,7 @@ model User {
   beneficiaryPools Pool[]       @relation("PoolBeneficiary")
   createdPools     Pool[]       @relation("PoolCreator")
   memberships      Membership[]
+  notifications    Notification[]
 
   @@map("users")
 }
@@ -124,9 +129,10 @@ model Pool {
   deadlineAt DateTime
   status     PoolStatus @default(OPEN)
 
-  memberships  Membership[]
-  transactions Transaction[]
-  refunds      Refund[]
+  memberships   Membership[]
+  transactions  Transaction[]
+  refunds       Refund[]
+  notifications Notification[]
 
   createdById      String?
   createdBy        User?   @relation("PoolCreator", fields: [createdById], references: [id])
@@ -244,4 +250,27 @@ model Refund {
   updatedAt DateTime @updatedAt
 
   @@map("refunds")
+}
+
+model Notification {
+  id String @id @default(uuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  type    NotificationType
+  title   String
+  message String
+
+  // Optional context link — e.g. which pool this notification is about.
+  poolId String?
+  pool   Pool?   @relation(fields: [poolId], references: [id])
+
+  isRead Boolean   @default(false)
+  readAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("notifications")
 }

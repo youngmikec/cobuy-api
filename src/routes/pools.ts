@@ -1,17 +1,20 @@
 import { FastifyInstance } from 'fastify';
 import { authenticate, requireRole, ValidateSchema } from '../middlewares';
 import {
+  AddPoolMembersSchema,
   CreatePoolSchema,
   JoinPoolSchema,
   ListPoolsQuerySchema,
   PayPoolShareSchema,
   PoolIdParamsSchema,
+  type AddPoolMembersInput,
   type JoinPoolInput,
   type ListPoolsQuery,
   type PayPoolShareInput,
   type PoolIdParams,
 } from '../schemas/pool.schema';
 import {
+  addPoolMembersHandler,
   createPoolHandler,
   getPoolHandler,
   joinPoolHandler,
@@ -438,5 +441,50 @@ export async function poolRoutes(app: FastifyInstance): Promise<void> {
       },
     },
     listPoolTransactionsHandler,
+  );
+
+  // POST /pools/add-members — leader hand-picks existing app users to add to their pool
+  app.post<{ Body: AddPoolMembersInput }>(
+    '/pools/add-members',
+    {
+      preHandler: [...requireAuth, requireRole(Role.Admin, Role.User), ValidateSchema(AddPoolMembersSchema, 'body')],
+      attachValidation: true,
+      schema: {
+        tags: ['Pools'],
+        summary: 'Add existing users to a pool (leader only)',
+        security: [{ bearerAuth: [] }],
+        body: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            userIds: { type: 'array', items: { type: 'string', format: 'uuid' }, minItems: 1, maxItems: 100 },
+          },
+          required: ['id', 'userIds'],
+        },
+        response: {
+          201: {
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+              data: {
+                type: 'object',
+                properties: {
+                  addedCount: { type: 'number' },
+                  skippedUserIds: { type: 'array', items: { type: 'string' } },
+                  memberships: { type: 'array', items: { type: 'object', properties: memberProperties } },
+                },
+              },
+              message: { type: 'string' },
+            },
+          },
+          400: { type: 'object', properties: errorProperties },
+          403: { type: 'object', properties: errorProperties },
+          404: { type: 'object', properties: errorProperties },
+          409: { type: 'object', properties: errorProperties },
+          ...authFailureResponses,
+        },
+      },
+    },
+    addPoolMembersHandler,
   );
 }
