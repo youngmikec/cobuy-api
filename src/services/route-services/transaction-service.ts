@@ -16,7 +16,9 @@ const transactionInclude = {
     membership: { include: { user: { select: memberUserSelect } } },
 } as const;
 
-const payablePoolStatuses = ['OPEN', 'ALMOSTFUL'] as const;
+// CLOSED only means "full — no new joins"; existing members can still pay
+// their share right up to the deadline.
+const payablePoolStatuses = ['OPEN', 'ALMOSTFUL', 'CLOSED'] as const;
 
 const paidTransactionStates: TransactionState[] = ['PAID', 'OVERPAID'];
 
@@ -40,12 +42,15 @@ export const initiatePoolPaymentService = async (userId: string, poolId: string,
             throw new AppError(404, 'NOT_FOUND', `Pool with id '${poolId}' not found`);
         }
 
-        if (!payablePoolStatuses.includes(pool.status as typeof payablePoolStatuses[number])) {
-            throw new AppError(400, 'POOL_NOT_OPEN', `Pool is not accepting payments`);
-        }
-
+        // Checked before the status gate so a pool that's already past its
+        // deadline (including EXPIRED, which only happens after the deadline
+        // job runs) always reports the real reason, not a generic one.
         if (pool.deadlineAt.getTime() <= Date.now()) {
             throw new AppError(400, 'POOL_EXPIRED', `Pool deadline has passed`);
+        }
+
+        if (!payablePoolStatuses.includes(pool.status as typeof payablePoolStatuses[number])) {
+            throw new AppError(400, 'POOL_NOT_OPEN', `Pool is not accepting payments`);
         }
 
         const membership = await prisma.membership.findUnique({

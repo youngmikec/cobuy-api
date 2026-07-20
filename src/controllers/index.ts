@@ -5,3 +5,4 @@ export * from './bank-controllers';
 export * from './category-controllers';
 export * from './transaction-controllers';
 export * from './webhook-controllers';
+export * from './notification-controllers';

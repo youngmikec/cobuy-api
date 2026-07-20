@@ -6,6 +6,7 @@ import { poolRoutes } from './pools';
 import { bankRoutes } from './banks';
 import { categoryRoutes } from './categories';
 import { webhookRoutes } from './webhooks';
+import { notificationRoutes } from './notifications';
 
 export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
   // Health check routes (no prefix)
@@ -21,6 +22,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       await api.register(poolRoutes);
       await api.register(bankRoutes);
       await api.register(categoryRoutes);
+      await api.register(notificationRoutes);
     },
     { prefix: '/api/v1' },
   );
