@@ -4,6 +4,12 @@ import {
     GetBanksResponse,
     GetTransactionResponse,
     GetWalletBalanceResponse,
+    InitiateRefundRequest,
+    InitiateRefundResponse,
+    InitiateRefundResponseBody,
+    InitiateSingleTransferRequest,
+    InitiateSingleTransferResponse,
+    InitiateSingleTransferResponseBody,
     InitTransactionRequest,
     InitTransactionResponse,
     InitTransactionResponseBody,
@@ -21,6 +27,7 @@ const apikey: string = process.env['MONNIFY_API_KEY'] ?? '';
 const secretKey: string = process.env['MONNIFY_SECRET_KEY'] ?? '';
 const contractCode: string = process.env['MONNIFY_MERCHANT_CODE'] ?? '';
 const defaultWalletAccountNumber: string = process.env['MONNIFY_MERCHANT_ACCOUNT_NUMBER'] ?? '';
+const redirectUrl: string = process.env['MONNIFY_REDIRECT_URL'] ?? '';
 
 // baseUrl is pinned to /api/v1 (see above), but wallet/transaction-query
 // endpoints live under /api/v2 — derive a bare root so those can build
@@ -97,7 +104,8 @@ export const initTransaction = async (params: {
         customerEmail: params.customerEmail,
         paymentReference: params.paymentReference,
         paymentDescription: params.paymentDescription,
-        paymentMethods: params.paymentMethods
+        paymentMethods: params.paymentMethods,
+        redirectUrl: redirectUrl
     };
 
     const response = await axios.post<InitTransactionResponse>(url, body, { headers });
@@ -163,5 +171,71 @@ export const getWalletBalance = async (accountNumber: string = defaultWalletAcco
         'Authorization': `Bearer ${authToken}`,
     };
     const response = await axios.get<GetWalletBalanceResponse>(url, { headers, params: { accountNumber } });
+    return response.data.responseBody;
+}
+
+/**
+ * POST /api/v1/refunds/initiate-refund — refund a completed collection back
+ * to the account it originally came from. Monnify resolves the destination
+ * itself from `transactionReference`; no destination account is passed here
+ * (see .claude/skills/monnify/monnify-cobuy-skill.md section 4).
+ */
+export const initiateRefund = async (params: {
+    refundReference: string;
+    transactionReference: string;
+    amount: number;
+    refundReason: string;
+}): Promise<InitiateRefundResponseBody> => {
+    const url: string = `${baseUrl}/refunds/initiate-refund`;
+    const authToken: string = await generateAuth();
+    const headers = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`,
+    };
+    const body: InitiateRefundRequest = {
+        refundReference: params.refundReference,
+        transactionReference: params.transactionReference,
+        refundAmount: params.amount,
+        refundReason: params.refundReason,
+        // Shown on the recipient's bank alert — Monnify caps this at 16 chars.
+        customerNote: 'COBUY REFUND',
+    };
+
+    const response = await axios.post<InitiateRefundResponse>(url, body, { headers });
+    return response.data.responseBody;
+}
+
+/**
+ * POST /api/v1/disbursements/single — pay out from Co-Buy's Monnify wallet
+ * to a beneficiary account. Always async: this returns "INITIATED", final
+ * status arrives via the disbursement webhook.
+ */
+export const initiateSingleTransfer = async (params: {
+    reference: string;
+    amount: number;
+    destinationAccountNumber: string;
+    destinationBankCode: string;
+    destinationAccountName?: string;
+    narration: string;
+}): Promise<InitiateSingleTransferResponseBody> => {
+    const url: string = `${baseUrl}/disbursements/single`;
+    const authToken: string = await generateAuth();
+    const headers = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`,
+    };
+    const body: InitiateSingleTransferRequest = {
+        amount: params.amount,
+        reference: params.reference,
+        narration: params.narration,
+        destinationBankCode: params.destinationBankCode,
+        destinationAccountNumber: params.destinationAccountNumber,
+        currency: 'NGN',
+        async: true,
+        ...(params.destinationAccountName ? { destinationAccountName: params.destinationAccountName } : {}),
+        ...(defaultWalletAccountNumber ? { sourceAccountNumber: defaultWalletAccountNumber } : {}),
+    };
+
+    const response = await axios.post<InitiateSingleTransferResponse>(url, body, { headers });
     return response.data.responseBody;
 }

@@ -80,8 +80,17 @@ export const PayPoolShareSchema = z.object({
     .positive({ message: 'Amount must be greater than 0' }),
 });
 
+export const AddPoolMembersSchema = z.object({
+  id: z.string({ required_error: 'Pool id is required' }).uuid({ message: 'Invalid pool id' }),
+  userIds: z
+    .array(z.string().uuid({ message: 'Invalid user id' }))
+    .min(1, { message: 'At least one user id is required' })
+    .max(100, { message: 'At most 100 users can be added at once' }),
+});
+
 export type CreatePoolInput = z.infer<typeof CreatePoolSchema>;
 export type PoolIdParams = z.infer<typeof PoolIdParamsSchema>;
 export type JoinPoolInput = z.infer<typeof JoinPoolSchema>;
 export type ListPoolsQuery = z.infer<typeof ListPoolsQuerySchema>;
 export type PayPoolShareInput = z.infer<typeof PayPoolShareSchema>;
+export type AddPoolMembersInput = z.infer<typeof AddPoolMembersSchema>;

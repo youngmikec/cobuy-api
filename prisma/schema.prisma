@@ -46,6 +46,28 @@ enum TransactionState {
   FAILED
 }
 
+enum RefundState {
+  INITIATED
+  COMPLETED
+  FAILED
+}
+
+enum NotificationType {
+  ADDED_TO_POOL
+  POOL_CREATED
+  PAYMENT_RECEIVED
+  POOL_STATUS_CHANGED
+  REFUND_RECEIVED
+  DISBURSEMENT_RECEIVED
+}
+
+enum DisbursementState {
+  INITIATED
+  SUCCESS
+  FAILED
+  REVERSED
+}
+
 model User {
   id           String    @id @default(uuid())
   avatar       String?
@@ -67,6 +89,7 @@ model User {
   beneficiaryPools Pool[]       @relation("PoolBeneficiary")
   createdPools     Pool[]       @relation("PoolCreator")
   memberships      Membership[]
+  notifications    Notification[]
 
   @@map("users")
 }
@@ -118,8 +141,11 @@ model Pool {
   deadlineAt DateTime
   status     PoolStatus @default(OPEN)
 
-  memberships  Membership[]
-  transactions Transaction[]
+  memberships   Membership[]
+  transactions  Transaction[]
+  refunds       Refund[]
+  notifications Notification[]
+  disbursement  Disbursement?
 
   createdById      String?
   createdBy        User?   @relation("PoolCreator", fields: [createdById], references: [id])
@@ -158,6 +184,7 @@ model Membership {
   joinedAt DateTime        @default(now())
 
   transactions Transaction[]
+  refunds      Refund[]
 
   @@unique([poolId, userId])
   @@map("memberships")
@@ -197,8 +224,97 @@ model Transaction {
   state  TransactionState @default(PENDING)
   paidAt DateTime?
 
+  refund Refund?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@map("transactions")
+}
+
+model Refund {
+  id String @id @default(uuid())
+
+  transactionId String     @unique
+  transaction   Transaction @relation(fields: [transactionId], references: [id])
+
+  poolId String
+  pool   Pool   @relation(fields: [poolId], references: [id])
+
+  membershipId String
+  membership   Membership @relation(fields: [membershipId], references: [id])
+
+  // Co-Buy-generated reference sent to Monnify ("CB-RF-{transactionId}-{nonce}").
+  refundReference String @unique
+  // Monnify's own reference, confirmed on the refund webhook.
+  monnifyRefundReference String?
+
+  amount Int
+
+  // Where the money goes back to — copied from the source Transaction's
+  // sourceAccountNumber/sourceBankCode at the time the refund is initiated.
+  destinationAccountNumber String
+  destinationBankCode      String
+
+  state       RefundState @default(INITIATED)
+  finalizedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("refunds")
+}
+
+model Notification {
+  id String @id @default(uuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  type    NotificationType
+  title   String
+  message String
+
+  // Optional context link — e.g. which pool this notification is about.
+  poolId String?
+  pool   Pool?   @relation(fields: [poolId], references: [id])
+
+  isRead Boolean   @default(false)
+  readAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("notifications")
+}
+
+model Disbursement {
+  id String @id @default(uuid())
+
+  // One payout per pool — it only ever funds once, when the target is met.
+  poolId String @unique
+  pool   Pool   @relation(fields: [poolId], references: [id])
+
+  // Co-Buy-generated reference sent to Monnify ("CB-PAY-{poolId}-{nonce}").
+  disbursementReference String  @unique
+  // Monnify's own reference, confirmed on the disbursement webhook.
+  monnifyReference       String?
+
+  // grossAmount = Pool.amountRaised at disbursement time; netAmount is what
+  // actually lands with the beneficiary (grossAmount - feeAmount).
+  grossAmount Int
+  feeAmount   Int
+  netAmount   Int
+
+  destinationAccountNumber String
+  destinationBankCode      String
+  destinationAccountName   String?
+
+  state       DisbursementState @default(INITIATED)
+  finalizedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("disbursements")
 }

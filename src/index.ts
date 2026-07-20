@@ -9,6 +9,7 @@ import { registerRoutes } from './routes/index';
 import prisma from './lib/prisma';
 import { AppError } from './helpers/error';
 import { getRequiredEnv } from './helpers/env';
+import { startPoolDeadlineJob, stopPoolDeadlineJob } from './jobs/pool-deadline-job';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -74,6 +75,7 @@ export async function buildApp(): Promise<FastifyInstance> {
         { name: 'Banks', description: 'Bank list and account resolution (Monnify)' },
         { name: 'Categories', description: 'Pool categories' },
         { name: 'Webhooks', description: 'Inbound Monnify webhook events' },
+        { name: 'Notifications', description: 'In-app user notifications' },
       ],
       components: {
         securitySchemes: {
@@ -153,6 +155,7 @@ async function start(): Promise<void> {
   const shutdown = async (signal: string): Promise<void> => {
     fastify.log.info(`Received ${signal}, starting graceful shutdown...`);
     try {
+      stopPoolDeadlineJob();
       await fastify.close();
       await prisma.$disconnect();
       fastify.log.info('Server closed successfully');
@@ -169,6 +172,7 @@ async function start(): Promise<void> {
   try {
     await fastify.listen({ port: PORT, host: HOST });
     fastify.log.info(`Server running in ${NODE_ENV} mode`);
+    startPoolDeadlineJob();
   } catch (err) {
     fastify.log.error(err);
     await prisma.$disconnect();

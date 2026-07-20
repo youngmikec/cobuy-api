@@ -3,6 +3,7 @@ import { AppError } from "../../helpers/error";
 import { toPoolDto } from "../../helpers/pool";
 import prisma from "../../lib/prisma";
 import { CreatePoolInput, ListPoolsQuery } from "../../schemas/pool.schema";
+import { createNotificationService, notifyPoolMembersService } from "./notification-service";
 
 const APP_BASE_URL = process.env['APP_BASE_URL'] ?? 'https://cobuy.app';
 
@@ -116,6 +117,20 @@ export const createPoolService = async (leaderId: string, payload: CreatePoolInp
             return {pool, membership};
         });
 
+        // Best-effort, outside the transaction — a notification failure
+        // shouldn't undo a pool that was already successfully created.
+        try {
+            await createNotificationService({
+                userId: leaderId,
+                type: 'POOL_CREATED',
+                title: 'Pool created',
+                message: `Your pool "${pool.name}" has been created successfully.`,
+                poolId: pool.id,
+            });
+        } catch (error: any) {
+            console.error(`Failed to create POOL_CREATED notification for user ${leaderId}:`, error.message);
+        }
+
         return {
             ...toPoolDto(pool),
             shareLink: `${APP_BASE_URL}/join/${pool.shareToken}`,
@@ -222,6 +237,11 @@ export const joinPoolService = async (userId: string, poolId: string) => {
             throw new AppError(409, 'ALREADY_JOINED', `You have already joined this pool`);
         }
 
+        // Computed ahead of the update so the same write can flip status to
+        // CLOSED the instant the last slot is taken — no deadline job needed
+        // to stop further joins.
+        const remainingAfterJoin = Math.max(pool.slotRemaining - 1, 0);
+
         const [membership] = await prisma.$transaction([
             prisma.membership.create({
                 data: {
@@ -234,12 +254,26 @@ export const joinPoolService = async (userId: string, poolId: string) => {
             }),
             prisma.pool.update({
                 where: { id: poolId },
-                data: { 
-                    slotRemaining: pool.slotRemaining > 0 ? { decrement: 1 } : 0,
-                    updatedAt: new Date() 
+                data: {
+                    slotRemaining: remainingAfterJoin,
+                    ...(remainingAfterJoin === 0 ? { status: 'CLOSED' } : {}),
+                    updatedAt: new Date(),
                 },
             }),
         ])  ;
+
+        if (remainingAfterJoin === 0) {
+            try {
+                await notifyPoolMembersService({
+                    poolId,
+                    type: 'POOL_STATUS_CHANGED',
+                    title: 'Pool is now closed',
+                    message: `"${pool.name}" has filled all its slots and is now closed to new members.`,
+                });
+            } catch (error: any) {
+                console.error(`Failed to fan out POOL_STATUS_CHANGED notifications for pool ${poolId}:`, error.message);
+            }
+        }
 
         return membership;
     } catch (error: any) {
@@ -264,6 +298,128 @@ export const listPoolMembersService = async (poolId: string) => {
         });
 
         return members;
+    } catch (error: any) {
+        if (error instanceof AppError) {
+            throw error;
+        }
+        throw new AppError(500, 'SERVER_ERROR', error.message);
+    }
+}
+
+// Lets the pool leader hand-pick existing app users to add directly,
+// instead of waiting for them to join via the share link. Already-members
+// are silently skipped (reported back in skippedUserIds) rather than
+// failing the whole batch.
+export const addPoolMembersService = async (leaderId: string, poolId: string, userIds: string[]) => {
+    try {
+        const pool = await prisma.pool.findUnique({ where: { id: poolId }, include: poolInclude });
+        if (!pool) {
+            throw new AppError(404, 'NOT_FOUND', `Pool with id '${poolId}' not found`);
+        }
+
+        if (pool.leaderId !== leaderId) {
+            throw new AppError(403, 'FORBIDDEN', `Only the pool leader can add members`);
+        }
+
+        if (!joinablePoolStatuses.includes(pool.status as typeof joinablePoolStatuses[number])) {
+            throw new AppError(400, 'POOL_NOT_OPEN', `Pool is not open for new members`);
+        }
+
+        if (pool.deadlineAt.getTime() <= Date.now()) {
+            throw new AppError(400, 'POOL_EXPIRED', `Pool deadline has passed`);
+        }
+
+        const uniqueUserIds = Array.from(new Set(userIds));
+
+        const users = await prisma.user.findMany({ where: { id: { in: uniqueUserIds } } });
+        const foundIds = new Set(users.map((user) => user.id));
+        const missingIds = uniqueUserIds.filter((id) => !foundIds.has(id));
+        if (missingIds.length > 0) {
+            throw new AppError(404, 'NOT_FOUND', `User(s) not found: ${missingIds.join(', ')}`);
+        }
+
+        const existingMemberships = await prisma.membership.findMany({
+            where: { poolId, userId: { in: uniqueUserIds } },
+            select: { userId: true },
+        });
+        const alreadyMemberIds = new Set(existingMemberships.map((membership) => membership.userId));
+        const newUserIds = uniqueUserIds.filter((id) => !alreadyMemberIds.has(id));
+
+        if (newUserIds.length === 0) {
+            throw new AppError(409, 'ALREADY_JOINED', `All selected users are already members of this pool`);
+        }
+
+        const slotsRemaining = Math.max(pool.maxMembers - pool._count.memberships, 0);
+        if (newUserIds.length > slotsRemaining) {
+            throw new AppError(
+                400,
+                'POOL_FULL',
+                `Pool only has ${slotsRemaining} slot(s) remaining, but ${newUserIds.length} new member(s) were selected`,
+            );
+        }
+
+        // Computed ahead of the update so the same write can flip status to
+        // CLOSED the instant the last slot is taken — same as joinPoolService.
+        const remainingAfterAdd = Math.max(pool.slotRemaining - newUserIds.length, 0);
+
+        const memberships = await prisma.$transaction(async (tx) => {
+            const created = await Promise.all(
+                newUserIds.map((userId) =>
+                    tx.membership.create({
+                        data: { poolId, userId, state: 'JOINED', joinedAt: new Date() },
+                        include: { user: { select: memberUserSelect } },
+                    }),
+                ),
+            );
+
+            await tx.pool.update({
+                where: { id: poolId },
+                data: {
+                    slotRemaining: remainingAfterAdd,
+                    ...(remainingAfterAdd === 0 ? { status: 'CLOSED' } : {}),
+                    updatedAt: new Date(),
+                },
+            });
+
+            return created;
+        });
+
+        // Best-effort, outside the transaction — a notification failure
+        // shouldn't undo memberships that were already successfully created.
+        await Promise.all(
+            memberships.map(async (membership) => {
+                try {
+                    await createNotificationService({
+                        userId: membership.userId,
+                        type: 'ADDED_TO_POOL',
+                        title: 'You were added to a pool',
+                        message: `${pool.leader.firstName} ${pool.leader.lastName} added you to "${pool.name}".`,
+                        poolId: pool.id,
+                    });
+                } catch (error: any) {
+                    console.error(`Failed to create ADDED_TO_POOL notification for user ${membership.userId}:`, error.message);
+                }
+            }),
+        );
+
+        if (remainingAfterAdd === 0) {
+            try {
+                await notifyPoolMembersService({
+                    poolId,
+                    type: 'POOL_STATUS_CHANGED',
+                    title: 'Pool is now closed',
+                    message: `"${pool.name}" has filled all its slots and is now closed to new members.`,
+                });
+            } catch (error: any) {
+                console.error(`Failed to fan out POOL_STATUS_CHANGED notifications for pool ${poolId}:`, error.message);
+            }
+        }
+
+        return {
+            addedCount: memberships.length,
+            skippedUserIds: Array.from(alreadyMemberIds),
+            memberships,
+        };
     } catch (error: any) {
         if (error instanceof AppError) {
             throw error;

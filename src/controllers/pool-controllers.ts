@@ -1,6 +1,7 @@
 import { FastifyReply, FastifyRequest } from "fastify";
 import { AppError } from "../helpers/error";
 import {
+    addPoolMembersService,
     createPoolService,
     getPoolByIdService,
     joinPoolService,
@@ -8,7 +9,7 @@ import {
     listPoolMembersService,
     listPoolsService,
 } from "../services/route-services/pool-service";
-import { CreatePoolInput, JoinPoolInput, ListPoolsQuery, PoolIdParams } from "../schemas/pool.schema";
+import { AddPoolMembersInput, CreatePoolInput, JoinPoolInput, ListPoolsQuery, PoolIdParams } from "../schemas/pool.schema";
 
 export const createPoolHandler = async (request: FastifyRequest, reply: FastifyReply) => {
     try {
@@ -118,6 +119,27 @@ export const listPoolMembersHandler = async (
             success: true,
             data: members,
             message: "Pool members retrieved successfully",
+        });
+    } catch (error: any) {
+        if (error instanceof AppError) {
+            throw error;
+        }
+        throw new AppError(500, 'SERVER_ERROR', `${error.message}`);
+    }
+}
+
+export const addPoolMembersHandler = async (
+    request: FastifyRequest<{ Body: AddPoolMembersInput }>,
+    reply: FastifyReply,
+) => {
+    try {
+        const leaderId = request.user.user.id;
+        const result = await addPoolMembersService(leaderId, request.body.id, request.body.userIds);
+
+        return reply.status(201).send({
+            success: true,
+            data: result,
+            message: "Members added successfully",
         });
     } catch (error: any) {
         if (error instanceof AppError) {
