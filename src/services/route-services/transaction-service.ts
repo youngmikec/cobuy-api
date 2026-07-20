@@ -4,6 +4,7 @@ import { AppError } from "../../helpers/error";
 import prisma from "../../lib/prisma";
 import { initiateRefund, initTransaction } from "../third-party-services/monnify";
 import { disburseToBeneficiaryService } from "./disbursement-service";
+import { createNotificationService, notifyPoolMembersService } from "./notification-service";
 
 const memberUserSelect = {
     id: true,
@@ -179,7 +180,7 @@ export const processMonnifyCollectionWebhookService = async (eventData: MonnifyC
     const state: TransactionState =
         amountPaid === transaction.amountExpected ? 'PAID' : amountPaid > transaction.amountExpected ? 'OVERPAID' : 'UNDERPAID';
 
-    const targetMet = await prisma.$transaction(async (tx) => {
+    const { targetMet, payerUserId, poolName } = await prisma.$transaction(async (tx) => {
         await tx.transaction.update({
             where: { id: transaction.id },
             data: {
@@ -193,7 +194,7 @@ export const processMonnifyCollectionWebhookService = async (eventData: MonnifyC
             },
         });
 
-        await tx.membership.update({
+        const updatedMembership = await tx.membership.update({
             where: { id: transaction.membershipId },
             data: { state: 'PAID' },
         });
@@ -213,10 +214,35 @@ export const processMonnifyCollectionWebhookService = async (eventData: MonnifyC
             },
         });
 
-        return justMetTarget;
+        return { targetMet: justMetTarget, payerUserId: updatedMembership.userId, poolName: pool?.name ?? 'your pool' };
     });
 
+    // Best-effort, outside the transaction — a notification failure
+    // shouldn't undo a payment that was already successfully recorded.
+    try {
+        await createNotificationService({
+            userId: payerUserId,
+            type: 'PAYMENT_RECEIVED',
+            title: 'Payment received',
+            message: `Your payment of ₦${amountPaid.toLocaleString()} for "${poolName}" was received.`,
+            poolId: transaction.poolId,
+        });
+    } catch (error: any) {
+        console.error(`Failed to create PAYMENT_RECEIVED notification for user ${payerUserId}:`, error.message);
+    }
+
     if (targetMet) {
+        try {
+            await notifyPoolMembersService({
+                poolId: transaction.poolId,
+                type: 'POOL_STATUS_CHANGED',
+                title: 'Pool fully funded',
+                message: `"${poolName}" has reached its funding target and will now be disbursed.`,
+            });
+        } catch (error: any) {
+            console.error(`Failed to fan out POOL_STATUS_CHANGED notifications for pool ${transaction.poolId}:`, error.message);
+        }
+
         await disburseToBeneficiaryService(transaction.poolId);
     }
 }
@@ -354,6 +380,20 @@ export const processMonnifyRefundWebhookService = async (eventData: MonnifyRefun
         where: { poolId: refund.poolId, state: { not: 'COMPLETED' } },
     });
     if (outstandingOnPool === 0) {
-        await prisma.pool.update({ where: { id: refund.poolId }, data: { status: 'REFUNDED', stateChangedAt: new Date() } });
+        const pool = await prisma.pool.update({
+            where: { id: refund.poolId },
+            data: { status: 'REFUNDED', stateChangedAt: new Date() },
+        });
+
+        try {
+            await notifyPoolMembersService({
+                poolId: refund.poolId,
+                type: 'POOL_STATUS_CHANGED',
+                title: 'Pool refunded',
+                message: `"${pool.name}" did not reach its funding target and all contributions have been refunded.`,
+            });
+        } catch (error: any) {
+            console.error(`Failed to fan out POOL_STATUS_CHANGED notifications for pool ${refund.poolId}:`, error.message);
+        }
     }
 }

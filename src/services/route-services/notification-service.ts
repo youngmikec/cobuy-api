@@ -22,6 +22,41 @@ export const createNotificationService = async (params: {
     });
 }
 
+// Fans out the same notification to every member of a pool — best-effort,
+// same pattern as the ADDED_TO_POOL loop in addPoolMembersService: one
+// member's failure is logged and skipped rather than failing the caller.
+export const notifyPoolMembersService = async (params: {
+    poolId: string;
+    type: NotificationType;
+    title: string;
+    message: string;
+    excludeUserId?: string;
+}) => {
+    const members = await prisma.membership.findMany({
+        where: {
+            poolId: params.poolId,
+            ...(params.excludeUserId ? { userId: { not: params.excludeUserId } } : {}),
+        },
+        select: { userId: true },
+    });
+
+    await Promise.all(
+        members.map(async ({ userId }) => {
+            try {
+                await createNotificationService({
+                    userId,
+                    type: params.type,
+                    title: params.title,
+                    message: params.message,
+                    poolId: params.poolId,
+                });
+            } catch (error: any) {
+                console.error(`Failed to create ${params.type} notification for user ${userId}:`, error.message);
+            }
+        }),
+    );
+}
+
 export const listNotificationsService = async (userId: string) => {
     try {
         return await prisma.notification.findMany({

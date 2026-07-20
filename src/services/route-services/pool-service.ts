@@ -3,7 +3,7 @@ import { AppError } from "../../helpers/error";
 import { toPoolDto } from "../../helpers/pool";
 import prisma from "../../lib/prisma";
 import { CreatePoolInput, ListPoolsQuery } from "../../schemas/pool.schema";
-import { createNotificationService } from "./notification-service";
+import { createNotificationService, notifyPoolMembersService } from "./notification-service";
 
 const APP_BASE_URL = process.env['APP_BASE_URL'] ?? 'https://cobuy.app';
 
@@ -116,6 +116,20 @@ export const createPoolService = async (leaderId: string, payload: CreatePoolInp
 
             return {pool, membership};
         });
+
+        // Best-effort, outside the transaction — a notification failure
+        // shouldn't undo a pool that was already successfully created.
+        try {
+            await createNotificationService({
+                userId: leaderId,
+                type: 'POOL_CREATED',
+                title: 'Pool created',
+                message: `Your pool "${pool.name}" has been created successfully.`,
+                poolId: pool.id,
+            });
+        } catch (error: any) {
+            console.error(`Failed to create POOL_CREATED notification for user ${leaderId}:`, error.message);
+        }
 
         return {
             ...toPoolDto(pool),
@@ -248,6 +262,19 @@ export const joinPoolService = async (userId: string, poolId: string) => {
             }),
         ])  ;
 
+        if (remainingAfterJoin === 0) {
+            try {
+                await notifyPoolMembersService({
+                    poolId,
+                    type: 'POOL_STATUS_CHANGED',
+                    title: 'Pool is now closed',
+                    message: `"${pool.name}" has filled all its slots and is now closed to new members.`,
+                });
+            } catch (error: any) {
+                console.error(`Failed to fan out POOL_STATUS_CHANGED notifications for pool ${poolId}:`, error.message);
+            }
+        }
+
         return membership;
     } catch (error: any) {
         if (error instanceof AppError) {
@@ -374,6 +401,19 @@ export const addPoolMembersService = async (leaderId: string, poolId: string, us
                 }
             }),
         );
+
+        if (remainingAfterAdd === 0) {
+            try {
+                await notifyPoolMembersService({
+                    poolId,
+                    type: 'POOL_STATUS_CHANGED',
+                    title: 'Pool is now closed',
+                    message: `"${pool.name}" has filled all its slots and is now closed to new members.`,
+                });
+            } catch (error: any) {
+                console.error(`Failed to fan out POOL_STATUS_CHANGED notifications for pool ${poolId}:`, error.message);
+            }
+        }
 
         return {
             addedCount: memberships.length,
