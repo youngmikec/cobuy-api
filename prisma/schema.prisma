@@ -56,6 +56,13 @@ enum NotificationType {
   ADDED_TO_POOL
 }
 
+enum DisbursementState {
+  INITIATED
+  SUCCESS
+  FAILED
+  REVERSED
+}
+
 model User {
   id           String    @id @default(uuid())
   avatar       String?
@@ -133,6 +140,7 @@ model Pool {
   transactions  Transaction[]
   refunds       Refund[]
   notifications Notification[]
+  disbursement  Disbursement?
 
   createdById      String?
   createdBy        User?   @relation("PoolCreator", fields: [createdById], references: [id])
@@ -273,4 +281,35 @@ model Notification {
   updatedAt DateTime @updatedAt
 
   @@map("notifications")
+}
+
+model Disbursement {
+  id String @id @default(uuid())
+
+  // One payout per pool — it only ever funds once, when the target is met.
+  poolId String @unique
+  pool   Pool   @relation(fields: [poolId], references: [id])
+
+  // Co-Buy-generated reference sent to Monnify ("CB-PAY-{poolId}-{nonce}").
+  disbursementReference String  @unique
+  // Monnify's own reference, confirmed on the disbursement webhook.
+  monnifyReference       String?
+
+  // grossAmount = Pool.amountRaised at disbursement time; netAmount is what
+  // actually lands with the beneficiary (grossAmount - feeAmount).
+  grossAmount Int
+  feeAmount   Int
+  netAmount   Int
+
+  destinationAccountNumber String
+  destinationBankCode      String
+  destinationAccountName   String?
+
+  state       DisbursementState @default(INITIATED)
+  finalizedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("disbursements")
 }

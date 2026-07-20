@@ -1,4 +1,5 @@
 import { FastifyReply, FastifyRequest } from "fastify";
+import { Role } from "@prisma/client";
 import { AppError } from "../helpers/error";
 import { initiatePoolPaymentService, listPoolTransactionsService } from "../services/route-services/transaction-service";
 import { PayPoolShareInput, PoolIdParams } from "../schemas/pool.schema";
@@ -30,11 +31,13 @@ export const listPoolTransactionsHandler = async (
     reply: FastifyReply,
 ) => {
     try {
-        const transactions = await listPoolTransactionsService(request.params.id);
+        const userId = request.user.user.id;
+        const isAdmin = request.user.user.role === Role.Admin;
+        const ledger = await listPoolTransactionsService(request.params.id, userId, isAdmin);
 
         return reply.status(200).send({
             success: true,
-            data: transactions,
+            data: ledger,
             message: "Pool transactions retrieved successfully",
         });
     } catch (error: any) {

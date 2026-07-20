@@ -1,8 +1,13 @@
 import { FastifyInstance } from 'fastify';
 import { Role } from '@prisma/client';
 import { authenticate, requireRole, ValidateSchema } from '../middlewares';
-import { NotificationIdParamsSchema, type NotificationIdParams } from '../schemas/notification.schema';
-import { listNotificationsHandler, markNotificationReadHandler } from '../controllers/index';
+import {
+  ListNotificationsQuerySchema,
+  NotificationIdParamsSchema,
+  type ListNotificationsQuery,
+  type NotificationIdParams,
+} from '../schemas/notification.schema';
+import { listAllNotificationsHandler, listNotificationsHandler, markNotificationReadHandler } from '../controllers/index';
 
 const notificationProperties = {
   id: { type: 'string' },
@@ -24,6 +29,7 @@ const errorProperties = {
 };
 
 const requireAuth = [authenticate, requireRole(Role.Admin, Role.User)];
+const requireAdmin = [authenticate, requireRole(Role.Admin)];
 
 const authFailureResponses = {
   401: { type: 'object', properties: errorProperties },
@@ -31,9 +37,42 @@ const authFailureResponses = {
 };
 
 export async function notificationRoutes(app: FastifyInstance): Promise<void> {
-  // GET /notifications — list the current user's notifications
-  app.get(
+  // GET /notifications — Admin only: list notifications across all users,
+  // optionally filtered to one user via ?userId=
+  app.get<{ Querystring: ListNotificationsQuery }>(
     '/notifications',
+    {
+      preHandler: [...requireAdmin, ValidateSchema(ListNotificationsQuerySchema, 'query')],
+      attachValidation: true,
+      schema: {
+        tags: ['Notifications'],
+        summary: 'List notifications across all users (Admin only)',
+        security: [{ bearerAuth: [] }],
+        querystring: {
+          type: 'object',
+          properties: {
+            userId: { type: 'string', format: 'uuid' },
+          },
+        },
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+              data: { type: 'array', items: { type: 'object', properties: notificationProperties } },
+              message: { type: 'string' },
+            },
+          },
+          ...authFailureResponses,
+        },
+      },
+    },
+    listAllNotificationsHandler,
+  );
+
+  // GET /notifications/mine — list the current user's notifications
+  app.get(
+    '/notifications/mine',
     {
       preHandler: requireAuth,
       schema: {

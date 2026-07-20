@@ -36,6 +36,22 @@ export const listNotificationsService = async (userId: string) => {
     }
 }
 
+// Admin-only: notifications across all users, optionally narrowed to one
+// user via the userId query filter.
+export const listAllNotificationsService = async (filterUserId?: string) => {
+    try {
+        return await prisma.notification.findMany({
+            where: filterUserId ? { userId: filterUserId } : {},
+            orderBy: { createdAt: 'desc' },
+        });
+    } catch (error: any) {
+        if (error instanceof AppError) {
+            throw error;
+        }
+        throw new AppError(500, 'SERVER_ERROR', error.message);
+    }
+}
+
 export const markNotificationReadService = async (userId: string, notificationId: string) => {
     try {
         const notification = await prisma.notification.findUnique({ where: { id: notificationId } });

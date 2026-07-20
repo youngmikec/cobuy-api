@@ -1,5 +1,6 @@
 import prisma from "../lib/prisma";
 import { initiateRefundsForPoolService } from "../services/route-services/transaction-service";
+import { disburseToBeneficiaryService } from "../services/route-services/disbursement-service";
 
 // Matches the "every 2 min" cadence called out in
 // .claude/skills/monnify/monnify-cobuy-skill.md for the deadline scheduler.
@@ -22,12 +23,15 @@ export const processExpiredPools = async (): Promise<void> => {
     for (const pool of duePools) {
         try {
             if (pool.amountRaised >= pool.targetAmount) {
-                // Funded in time — payout to the beneficiary is a separate,
-                // not-yet-built flow (FUNDED -> DISBURSING -> COMPLETED).
+                // Normally already triggered the moment the target was hit
+                // (see processMonnifyCollectionWebhookService) — this is a
+                // safety net for a lost/delayed webhook. disburseToBeneficiaryService
+                // is idempotent (one Disbursement row per pool), so this is safe.
                 await prisma.pool.update({
                     where: { id: pool.id },
                     data: { status: 'FUNDED', stateChangedAt: new Date() },
                 });
+                await disburseToBeneficiaryService(pool.id);
                 continue;
             }
 

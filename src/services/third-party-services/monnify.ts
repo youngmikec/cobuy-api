@@ -7,6 +7,9 @@ import {
     InitiateRefundRequest,
     InitiateRefundResponse,
     InitiateRefundResponseBody,
+    InitiateSingleTransferRequest,
+    InitiateSingleTransferResponse,
+    InitiateSingleTransferResponseBody,
     InitTransactionRequest,
     InitTransactionResponse,
     InitTransactionResponseBody,
@@ -199,5 +202,40 @@ export const initiateRefund = async (params: {
     };
 
     const response = await axios.post<InitiateRefundResponse>(url, body, { headers });
+    return response.data.responseBody;
+}
+
+/**
+ * POST /api/v1/disbursements/single — pay out from Co-Buy's Monnify wallet
+ * to a beneficiary account. Always async: this returns "INITIATED", final
+ * status arrives via the disbursement webhook.
+ */
+export const initiateSingleTransfer = async (params: {
+    reference: string;
+    amount: number;
+    destinationAccountNumber: string;
+    destinationBankCode: string;
+    destinationAccountName?: string;
+    narration: string;
+}): Promise<InitiateSingleTransferResponseBody> => {
+    const url: string = `${baseUrl}/disbursements/single`;
+    const authToken: string = await generateAuth();
+    const headers = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`,
+    };
+    const body: InitiateSingleTransferRequest = {
+        amount: params.amount,
+        reference: params.reference,
+        narration: params.narration,
+        destinationBankCode: params.destinationBankCode,
+        destinationAccountNumber: params.destinationAccountNumber,
+        currency: 'NGN',
+        async: true,
+        ...(params.destinationAccountName ? { destinationAccountName: params.destinationAccountName } : {}),
+        ...(defaultWalletAccountNumber ? { sourceAccountNumber: defaultWalletAccountNumber } : {}),
+    };
+
+    const response = await axios.post<InitiateSingleTransferResponse>(url, body, { headers });
     return response.data.responseBody;
 }
