@@ -273,6 +273,12 @@ export const initiateRefundsForPoolService = async (poolId: string): Promise<voi
         include: { refund: true },
     });
 
+    // Tracks whether every paid transaction ended this run either already
+    // refunded, newly INITIATED, or was skipped for a reason that needs
+    // manual attention — if anything was skipped, the pool must NOT be
+    // auto-completed below, since that would silently strand a member.
+    let allAccountedFor = true;
+
     for (const transaction of transactions) {
         if (transaction.refund) {
             continue;
@@ -282,6 +288,7 @@ export const initiateRefundsForPoolService = async (poolId: string): Promise<voi
             // No source account captured (e.g. webhook never landed cleanly) —
             // can't safely refund; needs manual attention/reconciliation.
             console.error(`Skipping refund for transaction ${transaction.id}: missing source account details`);
+            allAccountedFor = false;
             continue;
         }
 
@@ -321,7 +328,45 @@ export const initiateRefundsForPoolService = async (poolId: string): Promise<voi
             // One failed refund call shouldn't stop the rest of the pool's
             // members from being refunded — log and move on.
             console.error(`Failed to initiate refund for transaction ${transaction.id}:`, error.message);
+            allAccountedFor = false;
         }
+    }
+
+    // Normally the pool flips to REFUNDED from processMonnifyRefundWebhookService,
+    // once every Refund row hits COMPLETED. But a pool that expired with no
+    // paid contributions at all (or none that could be safely refunded) never
+    // gets a Refund row, so that webhook path never fires and the pool would
+    // otherwise be stuck on REFUNDING forever. Cover that here: if nothing was
+    // skipped and there's nothing outstanding, the pool is already done.
+    if (!allAccountedFor) {
+        return;
+    }
+
+    const outstanding = await prisma.refund.count({ where: { poolId, state: { not: 'COMPLETED' } } });
+    if (outstanding > 0) {
+        return;
+    }
+
+    const { count } = await prisma.pool.updateMany({
+        where: { id: poolId, status: 'REFUNDING' },
+        data: { status: 'REFUNDED', stateChangedAt: new Date() },
+    });
+
+    if (count === 0) {
+        // Already REFUNDED (or moved on) — nothing new to announce.
+        return;
+    }
+
+    const pool = await prisma.pool.findUnique({ where: { id: poolId } });
+    try {
+        await notifyPoolMembersService({
+            poolId,
+            type: 'POOL_STATUS_CHANGED',
+            title: 'Pool refunded',
+            message: `"${pool?.name ?? 'Your pool'}" did not reach its funding target and all contributions have been refunded.`,
+        });
+    } catch (error: any) {
+        console.error(`Failed to fan out POOL_STATUS_CHANGED notifications for pool ${poolId}:`, error.message);
     }
 }
 
