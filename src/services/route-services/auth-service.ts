@@ -1,7 +1,7 @@
 import { AppError } from "../../helpers/error";
 import { generateAccessToken, generateRefreshToken, hashPassword, verifyPassword, verifyRefreshToken } from "../../helpers/password";
 import { toSafeUser } from "../../helpers/user";
-import { generateOtp, getOtpExpiry, isOtpExpired } from "../../helpers/otp";
+import { generateOtp, getOtpExpiry, getOtpResendCooldownRemainingSeconds, isOtpExpired } from "../../helpers/otp";
 import { sendOtpEmail, sendPasswordResetEmail } from "../email-service";
 import prisma from "../../lib/prisma";
 import {
@@ -92,10 +92,11 @@ export const verifyEmailService = async (payload: VerifyEmailInput) => {
     }
 }
 
-// Called when the user's pending signup OTP has expired and they still
-// haven't verified their email. Only issues a new OTP once the previous one
-// has actually expired, so a verified email inbox can't be flooded by repeat
-// calls while a valid OTP is still outstanding.
+// Called when the user's pending signup OTP has expired (or they just want a
+// new one) and they still haven't verified their email. Always invalidates
+// whatever OTP is currently on the account and issues a fresh one — gated
+// only by a short cooldown (not OTP expiry) so an email inbox can't be
+// flooded by rapid repeat calls.
 export const resendOtpService = async (payload: ResendOtpInput) => {
     try {
         const { email } = payload;
@@ -109,8 +110,11 @@ export const resendOtpService = async (payload: ResendOtpInput) => {
             throw new AppError(400, 'ALREADY_VERIFIED', 'This account is already verified');
         }
 
-        if (user.otp && !isOtpExpired(user.otpExpiresAt)) {
-            throw new AppError(400, 'OTP_NOT_EXPIRED', 'An active OTP has already been sent to your email. Please check your inbox or wait for it to expire before requesting a new one');
+        if (user.otp) {
+            const cooldownRemaining = getOtpResendCooldownRemainingSeconds(user.otpExpiresAt);
+            if (cooldownRemaining > 0) {
+                throw new AppError(429, 'OTP_RESEND_COOLDOWN', `Please wait ${cooldownRemaining}s before requesting another OTP`);
+            }
         }
 
         const otp = generateOtp();
@@ -118,6 +122,7 @@ export const resendOtpService = async (payload: ResendOtpInput) => {
 
         await sendOtpEmail(email, otp);
 
+        // Overwrites (and thereby invalidates) any previously issued OTP.
         await prisma.user.update({ where: { email }, data: { otp, otpExpiresAt } });
 
         return { message: 'A new OTP has been sent to your email' };
