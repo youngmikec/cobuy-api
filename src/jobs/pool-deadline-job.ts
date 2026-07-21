@@ -2,6 +2,7 @@ import prisma from "../lib/prisma";
 import { initiateRefundsForPoolService } from "../services/route-services/transaction-service";
 import { disburseToBeneficiaryService } from "../services/route-services/disbursement-service";
 import { notifyPoolMembersService } from "../services/route-services/notification-service";
+import { emitPoolUpdate } from "../lib/socket";
 
 // Matches the "every 2 min" cadence called out in
 // .claude/skills/monnify/monnify-cobuy-skill.md for the deadline scheduler.
@@ -38,25 +39,28 @@ export const processExpiredPools = async (): Promise<void> => {
                 // (see processMonnifyCollectionWebhookService) — this is a
                 // safety net for a lost/delayed webhook. disburseToBeneficiaryService
                 // is idempotent (one Disbursement row per pool), so this is safe.
-                await prisma.pool.update({
+                const fundedPool = await prisma.pool.update({
                     where: { id: pool.id },
                     data: { status: 'FUNDED', stateChangedAt: new Date() },
                 });
+                emitPoolUpdate(fundedPool);
                 await notifyStatusChange(pool.id, 'Pool fully funded', `"${pool.name}" has reached its funding target and will now be disbursed.`);
                 await disburseToBeneficiaryService(pool.id);
                 continue;
             }
 
-            await prisma.pool.update({
+            const expiredPool = await prisma.pool.update({
                 where: { id: pool.id },
                 data: { status: 'EXPIRED', stateChangedAt: new Date() },
             });
+            emitPoolUpdate(expiredPool);
             await notifyStatusChange(pool.id, 'Pool expired', `"${pool.name}" did not reach its funding target before the deadline and has expired.`);
 
-            await prisma.pool.update({
+            const refundingPool = await prisma.pool.update({
                 where: { id: pool.id },
                 data: { status: 'REFUNDING', stateChangedAt: new Date() },
             });
+            emitPoolUpdate(refundingPool);
             await notifyStatusChange(pool.id, 'Pool refund in progress', `Refunds are now being processed for "${pool.name}".`);
 
             await initiateRefundsForPoolService(pool.id);

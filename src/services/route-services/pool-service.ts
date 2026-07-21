@@ -4,6 +4,7 @@ import { toPoolDto } from "../../helpers/pool";
 import prisma from "../../lib/prisma";
 import { CreatePoolInput, ListPoolsQuery } from "../../schemas/pool.schema";
 import { createNotificationService, notifyPoolMembersService } from "./notification-service";
+import { emitPoolUpdate } from "../../lib/socket";
 
 const APP_BASE_URL = process.env['APP_BASE_URL'] ?? 'https://cobuy.app';
 
@@ -242,7 +243,7 @@ export const joinPoolService = async (userId: string, poolId: string) => {
         // to stop further joins.
         const remainingAfterJoin = Math.max(pool.slotRemaining - 1, 0);
 
-        const [membership] = await prisma.$transaction([
+        const [membership, updatedPool] = await prisma.$transaction([
             prisma.membership.create({
                 data: {
                     poolId,
@@ -261,6 +262,8 @@ export const joinPoolService = async (userId: string, poolId: string) => {
                 },
             }),
         ])  ;
+
+        emitPoolUpdate(updatedPool);
 
         if (remainingAfterJoin === 0) {
             try {
@@ -362,7 +365,7 @@ export const addPoolMembersService = async (leaderId: string, poolId: string, us
         // CLOSED the instant the last slot is taken — same as joinPoolService.
         const remainingAfterAdd = Math.max(pool.slotRemaining - newUserIds.length, 0);
 
-        const memberships = await prisma.$transaction(async (tx) => {
+        const { memberships, updatedPool } = await prisma.$transaction(async (tx) => {
             const created = await Promise.all(
                 newUserIds.map((userId) =>
                     tx.membership.create({
@@ -372,7 +375,7 @@ export const addPoolMembersService = async (leaderId: string, poolId: string, us
                 ),
             );
 
-            await tx.pool.update({
+            const updated = await tx.pool.update({
                 where: { id: poolId },
                 data: {
                     slotRemaining: remainingAfterAdd,
@@ -381,8 +384,10 @@ export const addPoolMembersService = async (leaderId: string, poolId: string, us
                 },
             });
 
-            return created;
+            return { memberships: created, updatedPool: updated };
         });
+
+        emitPoolUpdate(updatedPool);
 
         // Best-effort, outside the transaction — a notification failure
         // shouldn't undo memberships that were already successfully created.

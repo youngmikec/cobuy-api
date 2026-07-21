@@ -1,9 +1,13 @@
 import { NotificationType } from "@prisma/client";
 import { AppError } from "../../helpers/error";
 import prisma from "../../lib/prisma";
+import { emitToUser } from "../../lib/socket";
 
 // Internal helper — errors bubble up to whichever service/transaction
 // called it (e.g. addPoolMembersService), matching the rest of this file.
+// Every notification in the app is created here, so emitting the socket
+// event from this one spot gives every notification type live delivery
+// (both direct callers and the notifyPoolMembersService fan-out below).
 export const createNotificationService = async (params: {
     userId: string;
     type: NotificationType;
@@ -11,7 +15,7 @@ export const createNotificationService = async (params: {
     message: string;
     poolId?: string;
 }) => {
-    return prisma.notification.create({
+    const notification = await prisma.notification.create({
         data: {
             userId: params.userId,
             type: params.type,
@@ -20,6 +24,10 @@ export const createNotificationService = async (params: {
             ...(params.poolId ? { poolId: params.poolId } : {}),
         },
     });
+
+    emitToUser(notification.userId, 'notification:new', notification);
+
+    return notification;
 }
 
 // Fans out the same notification to every member of a pool — best-effort,
