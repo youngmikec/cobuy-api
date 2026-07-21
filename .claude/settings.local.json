@@ -35,7 +35,8 @@
       "WebFetch(domain:developers.monnify.com)",
       "WebSearch",
       "Bash(cd *)",
-      "Bash(npx tsx -e ' *)"
+      "Bash(npx tsx -e ' *)",
+      "Bash(npx tsc *)"
     ]
   }
 }

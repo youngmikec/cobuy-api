@@ -7,8 +7,10 @@ import prisma from "../../lib/prisma";
 import {
     ForgotPasswordInput,
     LoginInput,
+    ResendOtpInput,
     ResetPasswordInput,
     SignupInput,
+    TriggerOtpInput,
     VerifyEmailInput,
 } from "../../schemas/auth.schema";
 import { Role } from "@prisma/client";
@@ -82,6 +84,76 @@ export const verifyEmailService = async (payload: VerifyEmailInput) => {
         });
 
         return toSafeUser(updated);
+    } catch (error: any) {
+        if (error instanceof AppError) {
+            throw error;
+        }
+        throw new AppError(500, 'SERVER_ERROR', error.message);
+    }
+}
+
+// Called when the user's pending signup OTP has expired and they still
+// haven't verified their email. Only issues a new OTP once the previous one
+// has actually expired, so a verified email inbox can't be flooded by repeat
+// calls while a valid OTP is still outstanding.
+export const resendOtpService = async (payload: ResendOtpInput) => {
+    try {
+        const { email } = payload;
+
+        const user = await prisma.user.findUnique({ where: { email } });
+        if (!user) {
+            throw new AppError(404, 'NOT_FOUND', 'User account not found');
+        }
+
+        if (user.isVerified) {
+            throw new AppError(400, 'ALREADY_VERIFIED', 'This account is already verified');
+        }
+
+        if (user.otp && !isOtpExpired(user.otpExpiresAt)) {
+            throw new AppError(400, 'OTP_NOT_EXPIRED', 'An active OTP has already been sent to your email. Please check your inbox or wait for it to expire before requesting a new one');
+        }
+
+        const otp = generateOtp();
+        const otpExpiresAt = getOtpExpiry();
+
+        await sendOtpEmail(email, otp);
+
+        await prisma.user.update({ where: { email }, data: { otp, otpExpiresAt } });
+
+        return { message: 'A new OTP has been sent to your email' };
+    } catch (error: any) {
+        if (error instanceof AppError) {
+            throw error;
+        }
+        throw new AppError(500, 'SERVER_ERROR', error.message);
+    }
+}
+
+// Backup endpoint for a user who completed registration but never finished
+// email verification (e.g. the original OTP email never arrived). Unlike
+// resendOtpService, this always issues a fresh OTP regardless of whether the
+// existing one has expired, since the goal here is just to unstick the user.
+export const triggerOtpService = async (payload: TriggerOtpInput) => {
+    try {
+        const { email } = payload;
+
+        const user = await prisma.user.findUnique({ where: { email } });
+        if (!user) {
+            throw new AppError(404, 'NOT_FOUND', 'User account not found');
+        }
+
+        if (user.isVerified) {
+            throw new AppError(400, 'ALREADY_VERIFIED', 'This account is already verified');
+        }
+
+        const otp = generateOtp();
+        const otpExpiresAt = getOtpExpiry();
+
+        await sendOtpEmail(email, otp);
+
+        await prisma.user.update({ where: { email }, data: { otp, otpExpiresAt } });
+
+        return { message: 'A verification OTP has been sent to your email' };
     } catch (error: any) {
         if (error instanceof AppError) {
             throw error;

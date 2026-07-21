@@ -3,8 +3,10 @@ import { ValidateSchema } from "../middlewares";
 import {
   forgotPasswordSchema,
   loginSchema,
+  resendOtpSchema,
   resetPasswordSchema,
   signupSchema,
+  triggerOtpSchema,
   verifyEmailSchema,
   refreshTokenSchema,
 } from "../schemas/auth.schema";
@@ -12,8 +14,10 @@ import {
   forgotPasswordHandler,
   loginHandler,
   refreshTokenHandler,
+  resendOtpHandler,
   resetPasswordHandler,
   signupHandler,
+  triggerOtpHandler,
   verifyEmailHandler,
 } from "../controllers/index";
 
@@ -136,6 +140,51 @@ export const authRoutes = async (app: FastifyInstance): Promise<void> => {
       },
     },
     verifyEmailHandler,
+  );
+
+  // POST /auth/resend-otp — resend an expired email-verification OTP
+  app.post(
+    '/auth/resend-otp',
+    {
+      preHandler: [ValidateSchema(resendOtpSchema, 'body')],
+      attachValidation: true,
+      schema: {
+        tags: ['Auth'],
+        summary: 'Resend an expired email verification OTP',
+        body: {
+          type: 'object',
+          properties: {
+            email: { type: 'string', format: 'email' },
+          },
+          required: ['email'],
+        },
+        response: authResponseSchema,
+      },
+    },
+    resendOtpHandler,
+  );
+
+  // POST /auth/trigger-otp — backup endpoint to (re)send a verification OTP
+  // for a registered account that never completed email verification
+  app.post(
+    '/auth/trigger-otp',
+    {
+      preHandler: [ValidateSchema(triggerOtpSchema, 'body')],
+      attachValidation: true,
+      schema: {
+        tags: ['Auth'],
+        summary: 'Trigger a verification OTP for an unverified account',
+        body: {
+          type: 'object',
+          properties: {
+            email: { type: 'string', format: 'email' },
+          },
+          required: ['email'],
+        },
+        response: authResponseSchema,
+      },
+    },
+    triggerOtpHandler,
   );
 
   // POST /auth/forgot-password — email a password reset OTP

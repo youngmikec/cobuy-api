@@ -4,15 +4,19 @@ import {
     forgotPasswordService,
     loginService,
     refreshTokenService,
+    resendOtpService,
     resetPasswordService,
     signupService,
+    triggerOtpService,
     verifyEmailService,
 } from "../services/route-services/auth-service";
 import {
     ForgotPasswordInput,
     LoginInput,
+    ResendOtpInput,
     ResetPasswordInput,
     SignupInput,
+    TriggerOtpInput,
     VerifyEmailInput,
 } from "../schemas/auth.schema";
 
@@ -77,6 +81,40 @@ export const verifyEmailHandler = async (request: FastifyRequest, reply: Fastify
             success: true,
             data: response,
             message: "Email verified successfully",
+        });
+    } catch (error: any) {
+        if (error instanceof AppError) {
+            throw error;
+        }
+        throw new AppError(500, 'SERVER_ERROR', `${error.message}`);
+    }
+}
+
+export const resendOtpHandler = async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+        const response = await resendOtpService(request.body as ResendOtpInput);
+
+        return reply.status(200).send({
+            success: true,
+            data: null,
+            message: response.message,
+        });
+    } catch (error: any) {
+        if (error instanceof AppError) {
+            throw error;
+        }
+        throw new AppError(500, 'SERVER_ERROR', `${error.message}`);
+    }
+}
+
+export const triggerOtpHandler = async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+        const response = await triggerOtpService(request.body as TriggerOtpInput);
+
+        return reply.status(200).send({
+            success: true,
+            data: null,
+            message: response.message,
         });
     } catch (error: any) {
         if (error instanceof AppError) {
