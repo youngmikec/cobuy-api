@@ -61,6 +61,26 @@ export const forgotPasswordSchema = z.object({
 
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
 
+export const resendOtpSchema = z.object({
+  email: z
+    .string({ required_error: 'Email is required' })
+    .email({ message: 'Invalid email address' })
+    .toLowerCase()
+    .trim(),
+});
+
+export type ResendOtpInput = z.infer<typeof resendOtpSchema>;
+
+export const triggerOtpSchema = z.object({
+  email: z
+    .string({ required_error: 'Email is required' })
+    .email({ message: 'Invalid email address' })
+    .toLowerCase()
+    .trim(),
+});
+
+export type TriggerOtpInput = z.infer<typeof triggerOtpSchema>;
+
 export const resetPasswordSchema = z.object({
   email: z
     .string({ required_error: 'Email is required' })
