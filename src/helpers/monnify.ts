@@ -36,3 +36,16 @@ export const verifyMonnifyWebhookSignature = (rawBody: string, signature: string
 
   return crypto.timingSafeEqual(expected, actual);
 };
+
+// axios's error.message on a non-2xx response is just the generic HTTP
+// status text ("Request failed with status code 400") — Monnify's actual
+// reason (responseMessage/responseCode) lives in the response body instead.
+// Use this in every catch around a Monnify API call so logs show the real
+// cause of a failure, not just the status code.
+export const describeMonnifyError = (error: any): string => {
+  const data = error?.response?.data;
+  if (data?.responseMessage) {
+    return `${data.responseMessage}${data.responseCode ? ` (${data.responseCode})` : ''}`;
+  }
+  return error?.message ?? String(error);
+};

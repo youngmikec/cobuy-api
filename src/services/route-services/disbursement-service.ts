@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { DisbursementState } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { initiateSingleTransfer, resolveBankAccount } from "../third-party-services/monnify";
+import { describeMonnifyError } from "../../helpers/monnify";
 import { createNotificationService, notifyPoolMembersService } from "./notification-service";
 import { emitPoolUpdate } from "../../lib/socket";
 
@@ -36,18 +37,25 @@ export const disburseToBeneficiaryService = async (poolId: string): Promise<void
         return;
     }
 
-    // Name Enquiry pre-flight if we don't already have a verified account
-    // name — required before every transfer (skill doc section 3).
-    let beneficiaryAccountName = pool.beneficiaryAccountName ?? undefined;
-    if (!beneficiaryAccountName) {
-        try {
-            const nameEnquiry = await resolveBankAccount(pool.beneficiaryAccountNumber, pool.beneficiaryBankCode);
-            beneficiaryAccountName = nameEnquiry.responseBody.accountName;
+    // Name Enquiry pre-flight — always re-verify against Monnify, even if
+    // beneficiaryAccountName already has a value. That value is free-text
+    // the pool creator typed in (see createPoolService), never itself
+    // confirmed against Monnify, so trusting it here would let a mistyped
+    // account number/bank code sail through every payment and only surface
+    // as an opaque 400 on the transfer call itself. Always resolving here
+    // means a bad beneficiary is caught with a clear, actionable log
+    // (and the pool safely left in DISBURSING for retry) before any transfer
+    // is attempted, and keeps the stored name in sync with Monnify's own.
+    let beneficiaryAccountName: string;
+    try {
+        const nameEnquiry = await resolveBankAccount(pool.beneficiaryAccountNumber, pool.beneficiaryBankCode);
+        beneficiaryAccountName = nameEnquiry.responseBody.accountName;
+        if (beneficiaryAccountName !== pool.beneficiaryAccountName) {
             await prisma.pool.update({ where: { id: poolId }, data: { beneficiaryAccountName } });
-        } catch (error: any) {
-            console.error(`Name Enquiry failed for pool ${poolId} beneficiary — leaving for retry:`, error.message);
-            return;
         }
+    } catch (error: any) {
+        console.error(`Name Enquiry failed for pool ${poolId} beneficiary — leaving for retry:`, describeMonnifyError(error));
+        return;
     }
 
     if (pool.status !== 'DISBURSING') {
@@ -100,7 +108,7 @@ export const disburseToBeneficiaryService = async (poolId: string): Promise<void
     } catch (error: any) {
         // Pool stays in DISBURSING — no Disbursement row was created, so the
         // next call to this function (job retry) will attempt it again.
-        console.error(`Failed to initiate disbursement for pool ${poolId}:`, error.message);
+        console.error(`Failed to initiate disbursement for pool ${poolId}:`, describeMonnifyError(error));
     }
 }
 

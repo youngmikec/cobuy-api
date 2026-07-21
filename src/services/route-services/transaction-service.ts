@@ -3,6 +3,7 @@ import { RefundState, TransactionState } from "@prisma/client";
 import { AppError } from "../../helpers/error";
 import prisma from "../../lib/prisma";
 import { initiateRefund, initTransaction } from "../third-party-services/monnify";
+import { describeMonnifyError } from "../../helpers/monnify";
 import { disburseToBeneficiaryService } from "./disbursement-service";
 import { createNotificationService, notifyPoolMembersService } from "./notification-service";
 import { emitPoolUpdate, emitToUser } from "../../lib/socket";
@@ -347,7 +348,7 @@ export const initiateRefundsForPoolService = async (poolId: string): Promise<voi
         } catch (error: any) {
             // One failed refund call shouldn't stop the rest of the pool's
             // members from being refunded — log and move on.
-            console.error(`Failed to initiate refund for transaction ${transaction.id}:`, error.message);
+            console.error(`Failed to initiate refund for transaction ${transaction.id}:`, describeMonnifyError(error));
             allAccountedFor = false;
         }
     }
