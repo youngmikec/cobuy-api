@@ -10,6 +10,7 @@ import prisma from './lib/prisma';
 import { AppError } from './helpers/error';
 import { getRequiredEnv } from './helpers/env';
 import { startPoolDeadlineJob, stopPoolDeadlineJob } from './jobs/pool-deadline-job';
+import { initSocket, closeSocket } from './lib/socket';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -151,11 +152,18 @@ export async function buildApp(): Promise<FastifyInstance> {
 async function start(): Promise<void> {
   const fastify = await buildApp();
 
+  // Attached here (not inside buildApp()) since buildApp() is also called as
+  // a throwaway JWT sign/verify helper from src/helpers/password.ts on
+  // nearly every request — doing this there would spin up a redundant
+  // socket.io server on every one of those calls.
+  initSocket(fastify);
+
   // Graceful shutdown handler
   const shutdown = async (signal: string): Promise<void> => {
     fastify.log.info(`Received ${signal}, starting graceful shutdown...`);
     try {
       stopPoolDeadlineJob();
+      await closeSocket();
       await fastify.close();
       await prisma.$disconnect();
       fastify.log.info('Server closed successfully');

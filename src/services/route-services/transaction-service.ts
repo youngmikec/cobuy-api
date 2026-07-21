@@ -5,6 +5,7 @@ import prisma from "../../lib/prisma";
 import { initiateRefund, initTransaction } from "../third-party-services/monnify";
 import { disburseToBeneficiaryService } from "./disbursement-service";
 import { createNotificationService, notifyPoolMembersService } from "./notification-service";
+import { emitPoolUpdate, emitToUser } from "../../lib/socket";
 
 const memberUserSelect = {
     id: true,
@@ -180,7 +181,7 @@ export const processMonnifyCollectionWebhookService = async (eventData: MonnifyC
     const state: TransactionState =
         amountPaid === transaction.amountExpected ? 'PAID' : amountPaid > transaction.amountExpected ? 'OVERPAID' : 'UNDERPAID';
 
-    const { targetMet, payerUserId, poolName } = await prisma.$transaction(async (tx) => {
+    const { targetMet, payerUserId, poolName, updatedPool } = await prisma.$transaction(async (tx) => {
         await tx.transaction.update({
             where: { id: transaction.id },
             data: {
@@ -203,7 +204,7 @@ export const processMonnifyCollectionWebhookService = async (eventData: MonnifyC
         const newAmountRaised = (pool?.amountRaised ?? 0) + amountPaid;
         const justMetTarget = !!pool && newAmountRaised >= pool.targetAmount && pool.status !== 'FUNDED';
 
-        await tx.pool.update({
+        const updated = await tx.pool.update({
             where: { id: transaction.poolId },
             data: {
                 amountRaised: { increment: amountPaid },
@@ -214,7 +215,26 @@ export const processMonnifyCollectionWebhookService = async (eventData: MonnifyC
             },
         });
 
-        return { targetMet: justMetTarget, payerUserId: updatedMembership.userId, poolName: pool?.name ?? 'your pool' };
+        return {
+            targetMet: justMetTarget,
+            payerUserId: updatedMembership.userId,
+            poolName: pool?.name ?? 'your pool',
+            updatedPool: updated,
+        };
+    });
+
+    // amountRaised changes on every payment, not just when the target is
+    // met, so this fires unconditionally (unlike the notifications below).
+    emitPoolUpdate(updatedPool);
+
+    // Monnify's hosted checkout doesn't redirect back to the app on success —
+    // this is the only signal the payer's device gets that the payment went
+    // through, so it can leave the "waiting for payment" screen.
+    emitToUser(payerUserId, 'payment:success', {
+        poolId: transaction.poolId,
+        transactionId: transaction.id,
+        amount: amountPaid,
+        poolStatus: updatedPool.status,
     });
 
     // Best-effort, outside the transaction — a notification failure
@@ -358,6 +378,10 @@ export const initiateRefundsForPoolService = async (poolId: string): Promise<voi
     }
 
     const pool = await prisma.pool.findUnique({ where: { id: poolId } });
+    if (pool) {
+        emitPoolUpdate(pool);
+    }
+
     try {
         await notifyPoolMembersService({
             poolId,
@@ -450,6 +474,8 @@ export const processMonnifyRefundWebhookService = async (eventData: MonnifyRefun
             where: { id: refund.poolId },
             data: { status: 'REFUNDED', stateChangedAt: new Date() },
         });
+
+        emitPoolUpdate(pool);
 
         try {
             await notifyPoolMembersService({

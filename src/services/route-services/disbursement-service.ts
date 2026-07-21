@@ -3,6 +3,7 @@ import { DisbursementState } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { initiateSingleTransfer, resolveBankAccount } from "../third-party-services/monnify";
 import { createNotificationService, notifyPoolMembersService } from "./notification-service";
+import { emitPoolUpdate } from "../../lib/socket";
 
 const PLATFORM_FEE_PERCENT = parseFloat(process.env['PLATFORM_FEE_PERCENT'] ?? '2');
 
@@ -50,7 +51,8 @@ export const disburseToBeneficiaryService = async (poolId: string): Promise<void
     }
 
     if (pool.status !== 'DISBURSING') {
-        await prisma.pool.update({ where: { id: poolId }, data: { status: 'DISBURSING', stateChangedAt: new Date() } });
+        const updatedPool = await prisma.pool.update({ where: { id: poolId }, data: { status: 'DISBURSING', stateChangedAt: new Date() } });
+        emitPoolUpdate(updatedPool);
 
         try {
             await notifyPoolMembersService({
@@ -131,6 +133,8 @@ export const processMonnifyDisbursementWebhookService = async (eventData: Monnif
             where: { id: disbursement.poolId },
             data: { status: 'COMPLETED', stateChangedAt: new Date() },
         });
+
+        emitPoolUpdate(pool);
 
         try {
             await notifyPoolMembersService({
